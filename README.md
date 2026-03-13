@@ -1,6 +1,6 @@
 # StudentTrack — Internship & Career Management Portal
 
-A full-stack web application that helps universities manage student internship placements and post-graduation employment tracking. Built with **Python FastAPI** backend and **Vanilla HTML/CSS/JS** frontend.
+A full-stack web application that helps universities manage student internship placements and post-graduation employment tracking. Built as a portfolio project to demonstrate Python backend engineering with FastAPI.
 
 ---
 
@@ -9,25 +9,27 @@ A full-stack web application that helps universities manage student internship p
 ### Three Role-Based Dashboards
 
 **Student**
-- Browse and search all open job postings
-- Apply with cover letter and resume URL
+- Browse and search paginated open job postings (filter by type, keyword)
+- Apply to jobs with cover letter and resume URL
 - Track application status in real time
+- View full status change history (timeline) for each application
 - Withdraw pending applications
-- Manage personal profile (GPA, major, resume, bio)
+- Manage personal profile (GPA, major, graduation year, resume, bio)
 
 **Company**
-- Create and manage own job postings
-- Job posting approval flow — new jobs are submitted for coordinator review before going live
+- Create and manage job postings through an approval workflow
 - Resubmit rejected jobs after editing
-- View applicants per job and update application status
-- Browse all open jobs from other companies (read-only)
+- View applicants per job, update application status
+- View full status change history per applicant
+- Browse all open jobs from other companies
 - Manage company profile
 
 **Coordinator (Admin)**
-- Overview dashboard with key stats (students, companies, jobs, applications, accepted)
-- Approve or reject pending job postings with optional rejection note
-- View all students, companies, jobs, and applications across the platform
-- Update any application status
+- Overview dashboard — total students, companies, pending jobs, applications, accepted count
+- Approve or reject pending job postings (with optional rejection note)
+- View and manage all students, companies, jobs, and applications
+- View full audit trail for any application
+- Update any application status directly
 
 ---
 
@@ -39,8 +41,8 @@ A full-stack web application that helps universities manage student internship p
 | ORM | SQLAlchemy 2.0 |
 | Database | PostgreSQL |
 | Migrations | Alembic |
-| Auth | JWT (access + refresh token rotation) |
-| Password | bcrypt via passlib |
+| Auth | JWT — access token + refresh token rotation |
+| Password hashing | bcrypt via passlib |
 | Validation | Pydantic v2 |
 | Frontend | Vanilla HTML, CSS, JavaScript (ES Modules) |
 
@@ -59,11 +61,11 @@ studenttrack/
 │   │   │   ├── students.py
 │   │   │   └── companies.py
 │   │   ├── core/
-│   │   │   ├── config.py
-│   │   │   ├── security.py
-│   │   │   └── deps.py
+│   │   │   ├── config.py          ← env vars via pydantic-settings
+│   │   │   ├── security.py        ← JWT + bcrypt helpers
+│   │   │   └── deps.py            ← FastAPI dependencies (require_student, etc.)
 │   │   ├── db/
-│   │   │   └── database.py
+│   │   │   └── database.py        ← SQLAlchemy engine + session
 │   │   ├── models/
 │   │   │   ├── user.py
 │   │   │   ├── student.py
@@ -71,14 +73,16 @@ studenttrack/
 │   │   │   ├── coordinator.py
 │   │   │   ├── job_posting.py
 │   │   │   ├── application.py
-│   │   │   ├── application_log.py
+│   │   │   ├── application_log.py ← audit trail for status changes
 │   │   │   └── refresh_token.py
 │   │   ├── schemas/
 │   │   │   ├── auth.py
 │   │   │   ├── job.py
 │   │   │   ├── application.py
+│   │   │   ├── application_log.py
 │   │   │   ├── student.py
-│   │   │   └── company.py
+│   │   │   ├── company.py
+│   │   │   └── pagination.py      ← generic PaginatedResponse[T]
 │   │   ├── services/
 │   │   │   ├── auth_service.py
 │   │   │   ├── job_service.py
@@ -99,23 +103,8 @@ studenttrack/
     ├── css/
     │   └── main.css
     └── js/
-        ├── api.js
-        └── auth.js
-```
-
----
-
-## Database Schema
-
-```
-users                   — base auth table (email, password_hash, role)
-students                — student profile (gpa, major, student_id, bio)
-companies               — company profile (name, location, contact)
-coordinators            — coordinator profile (department)
-job_postings            — job listings (title, type, salary, status, deadline, rejection_note)
-applications            — student applications (status, cover_letter, resume_url)
-application_status_logs — full audit trail for every status change
-refresh_tokens          — JWT refresh token rotation storage
+        ├── api.js            ← fetch wrapper with JWT header
+        └── auth.js           ← token helpers
 ```
 
 ---
@@ -125,8 +114,8 @@ refresh_tokens          — JWT refresh token rotation storage
 ### Prerequisites
 
 - Python 3.11+
-- PostgreSQL
-- VS Code with Live Server extension (for frontend)
+- PostgreSQL (running locally)
+- VS Code with **Live Server** extension (for the frontend)
 
 ### 1. Clone the repository
 
@@ -135,7 +124,7 @@ git clone https://github.com/yourusername/studenttrack.git
 cd studenttrack
 ```
 
-### 2. Setup Python environment
+### 2. Set up Python environment
 
 ```bash
 cd backend
@@ -184,83 +173,114 @@ alembic upgrade head
 python seed.py
 ```
 
-This creates all sample accounts:
+Seed creates **30 job postings** (25 OPEN — enough to test pagination across 3 pages), 8 students, 5 companies, and 20 applications with varied statuses.
 
-| Role | Email | Password |
-|---|---|---|
-| Coordinator | admin@studenttrack.com | admin123 |
-| Company | hr@techviet.com | company123 |
-| Company | recruit@fpt.com | company123 |
-| Company | jobs@vingroup.net | company123 |
-| Student | minh.nguyen@student.edu.vn | student123 |
-| Student | linh.tran@student.edu.vn | student123 |
-| Student | huy.le@student.edu.vn | student123 |
-| Student | an.pham@student.edu.vn | student123 |
-| Student | khoa.vo@student.edu.vn | student123 |
-
-> ⚠️ Change passwords after first login in production.
-
-### 7. Start the backend server
+### 7. Start the backend
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-- API: `http://127.0.0.1:8000`
-- Swagger docs: `http://127.0.0.1:8000/docs`
+- API base URL: `http://127.0.0.1:8000`
+- Interactive docs: `http://127.0.0.1:8000/docs`
 
 ### 8. Open the frontend
 
-Open `frontend/pages/index.html` with VS Code Live Server.
+Open `frontend/pages/index.html` with VS Code **Live Server**.
 
 ---
 
-## API Endpoints
+## Seed Accounts
+
+### Coordinator
+| Email | Password |
+|---|---|
+| admin@studenttrack.com | admin123 |
+
+### Companies — password: `company123`
+| Email | Company |
+|---|---|
+| hr@techviet.com | TechViet Solutions |
+| recruit@fpt.com | FPT Software |
+| jobs@vingroup.net | VinGroup Technology |
+| talent@momo.vn | MoMo E-Wallet |
+| careers@tiki.vn | Tiki Corporation |
+
+### Students — password: `student123`
+| Email | Name |
+|---|---|
+| minh.nguyen@student.edu.vn | Nguyen Thanh Minh |
+| linh.tran@student.edu.vn | Tran Thi Linh |
+| huy.le@student.edu.vn | Le Van Huy |
+| an.pham@student.edu.vn | Pham Thi An |
+| khoa.vo@student.edu.vn | Vo Minh Khoa |
+| tuan.nguyen@student.edu.vn | Nguyen Duc Tuan |
+| mai.le@student.edu.vn | Le Thi Mai |
+| long.pham@student.edu.vn | Pham Hoang Long |
+
+> ⚠️ Change all passwords before deploying to production.
+
+---
+
+## API Reference
+
+All paginated endpoints accept `?page=1&page_size=N` (max `page_size=100`) and return:
+
+```json
+{
+  "items": [...],
+  "total": 47,
+  "page": 2,
+  "page_size": 9,
+  "total_pages": 6
+}
+```
 
 ### Auth
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
 | POST | `/auth/register` | Register student or company | Public |
-| POST | `/auth/login` | Login — returns JWT tokens | Public |
+| POST | `/auth/login` | Login — returns JWT access + refresh token | Public |
 | POST | `/auth/token` | Login via Swagger UI (form-data) | Public |
-| POST | `/auth/refresh` | Refresh access token | Public |
+| POST | `/auth/refresh` | Refresh access token, rotate refresh token | Public |
 
 ### Jobs
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| GET | `/jobs/` | List all open jobs | Public |
-| GET | `/jobs/my` | List my company's jobs (all statuses) | Company |
-| GET | `/jobs/all` | List all jobs regardless of status | Coordinator |
-| GET | `/jobs/pending` | List jobs pending approval | Coordinator |
-| GET | `/jobs/{id}` | Get job detail | Public |
-| POST | `/jobs/` | Create job posting (auto status: pending) | Company |
-| PUT | `/jobs/{id}` | Update job posting | Company |
+| GET | `/jobs/` | All OPEN jobs, paginated | Public |
+| GET | `/jobs/{id}` | Job detail | Public |
+| GET | `/jobs/my` | My company's jobs, paginated | Company |
+| GET | `/jobs/all` | All jobs all statuses, paginated | Coordinator |
+| GET | `/jobs/pending` | Pending approval jobs, paginated | Coordinator |
+| POST | `/jobs/` | Create job (auto status: `pending`) | Company |
+| PUT | `/jobs/{id}` | Update job (smart status transitions) | Company |
 | POST | `/jobs/{id}/resubmit` | Resubmit rejected job for re-approval | Company |
-| PUT | `/jobs/{id}/approve` | Approve a pending job | Coordinator |
-| PUT | `/jobs/{id}/reject` | Reject a pending job with note | Coordinator |
-| DELETE | `/jobs/{id}` | Delete job posting | Company |
+| PUT | `/jobs/{id}/approve` | Approve pending job | Coordinator |
+| PUT | `/jobs/{id}/reject` | Reject pending job with note | Coordinator |
+| DELETE | `/jobs/{id}` | Delete job (cascades to applications) | Company |
 
 ### Applications
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
 | POST | `/applications/` | Apply to a job | Student |
-| GET | `/applications/my` | Get my applications | Student |
-| GET | `/applications/job/{job_id}` | Get applicants for a job | Company |
-| PUT | `/applications/{id}/status` | Update application status | Company / Coordinator / Student (withdraw only) |
-| GET | `/applications/all` | Get all applications | Coordinator |
+| GET | `/applications/my` | My applications | Student |
+| GET | `/applications/job/{job_id}` | Applicants for a job | Company |
+| GET | `/applications/all` | All applications, paginated + `?status=` filter | Coordinator |
+| GET | `/applications/{id}/logs` | Full status change history | Student / Company / Coordinator |
+| PUT | `/applications/{id}/status` | Update status | Company / Coordinator / Student (withdraw only) |
 
 ### Students
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| GET | `/students/` | List all students | Coordinator |
-| GET | `/students/profile` | Get my profile | Student |
+| GET | `/students/` | All students | Coordinator |
+| GET | `/students/profile` | My profile | Student |
 | PUT | `/students/profile` | Update my profile | Student |
 
 ### Companies
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| GET | `/companies/` | List all companies | Coordinator |
-| GET | `/companies/profile` | Get my profile | Company |
+| GET | `/companies/` | All companies | Coordinator |
+| GET | `/companies/profile` | My profile | Company |
 | PUT | `/companies/profile` | Update my profile | Company |
 
 ---
@@ -268,62 +288,66 @@ Open `frontend/pages/index.html` with VS Code Live Server.
 ## Authentication Flow
 
 ```
-Register  →  POST /auth/register  →  returns UserResponse
-Login     →  POST /auth/login     →  returns access_token + refresh_token
+Register  →  POST /auth/register  →  UserResponse
+Login     →  POST /auth/login     →  { access_token, refresh_token }
 API call  →  Authorization: Bearer <access_token>
-Expired   →  POST /auth/refresh   →  returns new access_token + new refresh_token
-                                      (old refresh token is revoked)
+Expired   →  POST /auth/refresh   →  new access_token + new refresh_token
+                                      old refresh token is revoked (rotation)
 ```
-
-Token rotation is implemented — every refresh invalidates the old refresh token and issues a fresh pair.
 
 ---
 
-## Job Posting Flow
+## Job Posting Status Flow
 
 ```
 Company creates job
         ↓
-    PENDING  ──────────────────────────────────────────────────────┐
-        ↓  (Coordinator reviews)                                    │
-   APPROVED ──── REJECTED (with note)                              │
-        ↓              ↓                                            │
-      OPEN      Company edits & resubmits ──────────────────────────┘
-        ↓
-     CLOSED  ──── (reopen, no re-approval needed)  ──────── OPEN
-        ↓
-   Company edits content
-        ↓
-    PENDING  (requires re-approval since content changed)
+    PENDING ◄─────────────────────────────────────────────┐
+        │  Coordinator reviews                             │
+        ├──► APPROVED                                      │
+        │        │                                         │
+        │        ▼                                         │
+        │      OPEN ◄────► CLOSED   (no re-approval)      │
+        │        │                                         │
+        │        └── company edits content ────────────────┘
+        │                                   (auto reset to PENDING)
+        └──► REJECTED
+                 │
+                 └── company edits & resubmits ────────────┘
 ```
 
-**Status transition rules:**
-
-| From | To | Who | Condition |
+| From | To | Who | Notes |
 |---|---|---|---|
-| — | `PENDING` | Company | On create |
-| `PENDING` | `APPROVED` | Coordinator | — |
-| `PENDING` | `REJECTED` | Coordinator | With optional note |
-| `REJECTED` | `PENDING` | Company | Resubmit after editing |
-| `APPROVED` | `OPEN` | Company | Make visible to students |
-| `OPEN` | `CLOSED` | Company | Hide temporarily |
-| `CLOSED` | `OPEN` | Company | Reopen — **no re-approval needed** |
-| `OPEN` / `CLOSED` | `PENDING` | Company | Auto-reset when content is edited |
+| — | `pending` | Company | On create |
+| `pending` | `approved` | Coordinator | |
+| `pending` | `rejected` | Coordinator | Rejection note stored on job |
+| `rejected` | `pending` | Company | After editing + resubmit |
+| `approved` | `open` | Company | Makes job visible to students |
+| `open` | `closed` | Company | Hides from students temporarily |
+| `closed` | `open` | Company | Reopen — no re-approval needed |
+| `open` / `closed` | `pending` | System | Auto-reset when company edits job content |
 
-> Only `OPEN` jobs appear in the public listing (`GET /jobs/`).
-> Editing content on a live (`OPEN`) or `CLOSED` job automatically resets it to `PENDING` for coordinator re-approval.
+> Only `open` jobs appear in the public listing (`GET /jobs/`).
 
 ---
 
 ## Application Status Flow
 
 ```
-PENDING → REVIEWING → INTERVIEW → ACCEPTED
-                               ↘ REJECTED
-PENDING → WITHDRAWN  (student can withdraw at any active stage)
+Student applies
+      ↓
+   PENDING → REVIEWING → INTERVIEW → ACCEPTED
+                                  ↘ REJECTED
+   (student can withdraw at any active stage → WITHDRAWN)
 ```
 
-Every status change is automatically logged to `application_status_logs` with timestamp and the user who made the change.
+Every status change is automatically written to `application_status_logs` with:
+- Old status → new status
+- Who changed it (user ID, full name, role)
+- Timestamp
+- Optional note
+
+The full history is accessible via `GET /applications/{id}/logs` and displayed as a color-coded timeline in the UI for all three roles.
 
 ---
 
@@ -332,43 +356,39 @@ Every status change is automatically logged to `application_status_logs` with ti
 | Action | Student | Company | Coordinator |
 |---|---|---|---|
 | Browse open jobs | ✅ | ✅ | ✅ |
-| View job detail | ✅ | ✅ | ✅ |
 | Apply to job | ✅ | ❌ | ❌ |
 | Withdraw own application | ✅ | ❌ | ❌ |
-| Create job posting | ❌ | ✅ | ❌ |
-| Edit / delete own job | ❌ | ✅ (own only) | ❌ |
-| Resubmit rejected job | ❌ | ✅ (own only) | ❌ |
+| View own application logs | ✅ | ❌ | ❌ |
+| Create / edit / delete job | ❌ | ✅ own only | ❌ |
+| Resubmit rejected job | ❌ | ✅ own only | ❌ |
+| View applicants + their logs | ❌ | ✅ own jobs | ✅ all |
+| Update application status | ❌ | ✅ own jobs | ✅ all |
 | Approve / reject job | ❌ | ❌ | ✅ |
-| View own job applicants | ❌ | ✅ (own only) | ✅ (all) |
-| Update application status | ❌ | ✅ (own jobs) | ✅ (all) |
-| View all students | ❌ | ❌ | ✅ |
-| View all companies | ❌ | ❌ | ✅ |
-| View all jobs | ❌ | ❌ | ✅ |
-| View all applications | ❌ | ❌ | ✅ |
-| Self-register | ✅ | ✅ | ❌ (seeded only) |
+| View all students / companies | ❌ | ❌ | ✅ |
+| Self-register | ✅ | ✅ | ❌ seeded only |
 
 ---
 
 ## Environment Variables
 
-| Variable | Description | Default |
+| Variable | Description | Required |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL connection string | required |
-| `SECRET_KEY` | JWT signing secret | required |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime | 30 |
-| `REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime | 7 |
+| `DATABASE_URL` | PostgreSQL connection string | ✅ |
+| `SECRET_KEY` | JWT signing secret — use a long random string in production | ✅ |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime (default: 30) | |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime (default: 7) | |
 
 ---
 
-## Built With
+## What This Project Demonstrates
 
-This project was built as a portfolio project to demonstrate:
-
-- Python backend development with FastAPI
-- Clean service-layer architecture (router → service → model)
-- Relational database design with SQLAlchemy + Alembic migrations
-- JWT authentication with refresh token rotation
-- Role-based access control (RBAC)
-- RESTful API design with Pydantic v2 validation
-- Job approval workflow with audit trail
-- Full-stack integration with Vanilla JS ES Modules frontend
+- **FastAPI** — routing, dependency injection, Swagger UI, lifespan events
+- **SQLAlchemy 2.0** — ORM models, relationships, cascade deletes, enum columns
+- **Alembic** — migration workflow including enum and FK constraint changes
+- **Pydantic v2** — request/response validation, generic schemas (`PaginatedResponse[T]`)
+- **JWT authentication** — access + refresh token rotation, role-based route guards
+- **Service-layer architecture** — routers stay thin, all business logic lives in services
+- **Offset pagination** — generic `PaginationParams` dependency reused across all listing endpoints
+- **Audit trail** — every application status change logged with actor name, role, and timestamp
+- **Approval workflow** — multi-step job posting flow with smart automatic status transitions
+- **Vanilla JS ES Modules** — no framework, native fetch API, JWT token management, dynamic UI rendering
