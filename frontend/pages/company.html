@@ -153,6 +153,21 @@
 
         .empty-state { text-align: center; padding: 3rem; color: #94a3b8; font-size: 0.875rem; }
         .loading { text-align: center; padding: 2rem; color: #94a3b8; font-size: 0.875rem; }
+
+        /* ── Pagination ── */
+        .pagination {
+            display: flex; align-items: center; justify-content: center;
+            gap: 0.5rem; margin-top: 1.5rem; flex-wrap: wrap;
+        }
+        .page-btn {
+            padding: 0.4rem 0.85rem; border: 1px solid #e2e8f0; background: white;
+            border-radius: 6px; font-size: 0.82rem; font-weight: 500; cursor: pointer;
+            color: #475569; transition: all 0.15s;
+        }
+        .page-btn:hover:not(:disabled) { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+        .page-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
+        .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .page-info { font-size: 0.82rem; color: #64748b; padding: 0 0.5rem; }
     </style>
 </head>
 <body>
@@ -183,6 +198,7 @@
         <div id="jobs-container" class="job-list">
             <div class="loading">Loading...</div>
         </div>
+        <div id="my-jobs-pagination" class="pagination"></div>
     </div>
 
     <!-- BROWSE ALL JOBS (read-only) -->
@@ -200,6 +216,7 @@
         <div id="browse-container" class="browse-grid">
             <div class="loading">Loading...</div>
         </div>
+        <div id="browse-pagination" class="pagination"></div>
     </div>
 
     <!-- COMPANY PROFILE -->
@@ -322,6 +339,8 @@
 
     let editingJobId = null;
     let allBrowseJobs = [];
+    let myJobsPage = 1;
+    const MY_JOBS_PAGE_SIZE = 10;
 
     // ── Tabs ───────────────────────────────────────────
     document.getElementById('tab-my-jobs').addEventListener('click', function() {
@@ -347,14 +366,38 @@
     });
 
     // ── My Job Postings ────────────────────────────────
-    async function loadMyJobs() {
+    async function loadMyJobs(page = 1) {
+        myJobsPage = page;
+        document.getElementById('jobs-container').innerHTML = '<div class="loading">Loading...</div>';
+        document.getElementById('my-jobs-pagination').innerHTML = '';
         try {
-            const jobs = await api.get('/jobs/my');
-            renderMyJobs(jobs);
+            const params = new URLSearchParams({ page: myJobsPage, page_size: MY_JOBS_PAGE_SIZE });
+            const data = await api.get(`/jobs/my?${params}`);
+            renderMyJobs(data.items);
+            renderMyJobsPagination(data.page, data.total_pages, data.total);
         } catch {
             document.getElementById('jobs-container').innerHTML =
                 `<div class="empty-state">❌ Failed to load jobs</div>`;
         }
+    }
+
+    function renderMyJobsPagination(page, totalPages, total) {
+        const el = document.getElementById('my-jobs-pagination');
+        if (totalPages <= 1) { el.innerHTML = ''; return; }
+        const pages = [];
+        for (let i = 1; i <= totalPages; i++) {
+            if (i===1||i===totalPages||(i>=page-1&&i<=page+1)) pages.push(i);
+            else if (pages[pages.length-1]!=='...') pages.push('...');
+        }
+        el.innerHTML = `
+            <button class="page-btn" id="mjprev" ${page===1?'disabled':''}>← Prev</button>
+            ${pages.map(p=>p==='...'?`<span class="page-info">...</span>`:`<button class="page-btn ${p===page?'active':''}" data-p="${p}">${p}</button>`).join('')}
+            <button class="page-btn" id="mjnext" ${page===totalPages?'disabled':''}>Next →</button>
+            <span class="page-info">${total} jobs total</span>
+        `;
+        document.getElementById('mjprev').addEventListener('click',()=>loadMyJobs(page-1));
+        document.getElementById('mjnext').addEventListener('click',()=>loadMyJobs(page+1));
+        el.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click',()=>loadMyJobs(parseInt(b.dataset.p))));
     }
 
     function renderMyJobs(jobs) {
@@ -478,11 +521,23 @@
         } catch(err) { showMsg('jobs', `❌ ${err.message}`, 'error'); }
     }
 
-    // ── Browse All Jobs ────────────────────────────────
-    async function loadBrowseJobs() {
+    // ── Browse All Jobs (paginated) ───────────────────
+    let browsePage = 1;
+    const BROWSE_PAGE_SIZE = 9;
+    let browseSearch = '';
+    let browseType   = '';
+
+    async function loadBrowseJobs(page = 1) {
+        browsePage = page;
+        document.getElementById('browse-container').innerHTML = '<div class="loading">Loading...</div>';
+        document.getElementById('browse-pagination').innerHTML = '';
         try {
-            allBrowseJobs = await api.get('/jobs/');
-            renderBrowseJobs(allBrowseJobs);
+            const params = new URLSearchParams({ page: browsePage, page_size: BROWSE_PAGE_SIZE });
+            const data = await api.get(`/jobs/?${params}`);
+            // data = { items, total, page, page_size, total_pages }
+            allBrowseJobs = data.items;
+            renderBrowseJobs(data.items);
+            renderBrowsePagination(data.page, data.total_pages, data.total);
         } catch {
             document.getElementById('browse-container').innerHTML =
                 `<div class="empty-state">❌ Failed to load jobs</div>`;
@@ -491,11 +546,17 @@
 
     function renderBrowseJobs(jobs) {
         const c = document.getElementById('browse-container');
-        if (!jobs.length) {
+        // client-side filter on current page items
+        const filtered = jobs.filter(j =>
+            (j.title.toLowerCase().includes(browseSearch) ||
+             (j.location||'').toLowerCase().includes(browseSearch)) &&
+            (!browseType || j.job_type === browseType)
+        );
+        if (!filtered.length) {
             c.innerHTML = `<div class="empty-state">No open jobs found</div>`;
             return;
         }
-        c.innerHTML = jobs.map(job => `
+        c.innerHTML = filtered.map(job => `
             <div class="browse-card" data-browse-id="${job.id}">
                 <div class="browse-card-header">
                     <div class="job-title">${job.title}</div>
@@ -513,10 +574,33 @@
                 </div>
             </div>
         `).join('');
-
         document.querySelectorAll('[data-browse-id]').forEach(card => {
             card.addEventListener('click', () => openBrowseJob(parseInt(card.dataset.browseId)));
         });
+    }
+
+    function renderBrowsePagination(page, totalPages, total) {
+        const el = document.getElementById('browse-pagination');
+        if (totalPages <= 1) { el.innerHTML = ''; return; }
+        const pages = [];
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= page-1 && i <= page+1)) pages.push(i);
+            else if (pages[pages.length-1] !== '...') pages.push('...');
+        }
+        el.innerHTML = `
+            <button class="page-btn" id="bprev" ${page===1?'disabled':''}>← Prev</button>
+            ${pages.map(p => p==='...'
+                ? `<span class="page-info">...</span>`
+                : `<button class="page-btn ${p===page?'active':''}" data-p="${p}">${p}</button>`
+            ).join('')}
+            <button class="page-btn" id="bnext" ${page===totalPages?'disabled':''}>Next →</button>
+            <span class="page-info">${total} jobs total</span>
+        `;
+        document.getElementById('bprev').addEventListener('click', () => loadBrowseJobs(page-1));
+        document.getElementById('bnext').addEventListener('click', () => loadBrowseJobs(page+1));
+        el.querySelectorAll('[data-p]').forEach(b =>
+            b.addEventListener('click', () => loadBrowseJobs(parseInt(b.dataset.p)))
+        );
     }
 
     async function openBrowseJob(jobId) {
@@ -552,17 +636,14 @@
         if (e.target === this) this.classList.remove('show');
     });
 
-    document.getElementById('browse-search').addEventListener('input', filterBrowse);
-    document.getElementById('browse-filter-type').addEventListener('change', filterBrowse);
-
-    function filterBrowse() {
-        const s = document.getElementById('browse-search').value.toLowerCase();
-        const t = document.getElementById('browse-filter-type').value;
-        renderBrowseJobs(allBrowseJobs.filter(j =>
-            (j.title.toLowerCase().includes(s) || (j.location||'').toLowerCase().includes(s)) &&
-            (!t || j.job_type === t)
-        ));
-    }
+    document.getElementById('browse-search').addEventListener('input', function() {
+        browseSearch = this.value.toLowerCase();
+        loadBrowseJobs(1);   // reset to page 1 on new search
+    });
+    document.getElementById('browse-filter-type').addEventListener('change', function() {
+        browseType = this.value;
+        loadBrowseJobs(1);
+    });
 
     // ── Create / Edit Job Modal ────────────────────────
     document.getElementById('btn-create-job').addEventListener('click', () => {

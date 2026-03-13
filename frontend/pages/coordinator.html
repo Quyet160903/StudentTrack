@@ -106,6 +106,21 @@
         .btn-reject-lg:hover { background: #fecaca; }
         .btn-cancel-lg  { padding: 0.6rem 1.25rem; background: #f1f5f9; color: #475569; border: none; border-radius: 8px; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
         .btn-cancel-lg:hover { background: #e2e8f0; }
+
+        /* ── Pagination ── */
+        .pagination {
+            display: flex; align-items: center; justify-content: center;
+            gap: 0.5rem; margin-top: 1.5rem; flex-wrap: wrap;
+        }
+        .page-btn {
+            padding: 0.4rem 0.85rem; border: 1px solid #e2e8f0; background: white;
+            border-radius: 6px; font-size: 0.82rem; font-weight: 500; cursor: pointer;
+            color: #475569; transition: all 0.15s;
+        }
+        .page-btn:hover:not(:disabled) { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+        .page-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
+        .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .page-info { font-size: 0.82rem; color: #64748b; padding: 0 0.5rem; }
     </style>
 </head>
 <body>
@@ -188,6 +203,7 @@
             </select>
         </div>
         <div class="table-wrapper"><div id="jobs-container"><div class="loading">Loading...</div></div></div>
+        <div id="jobs-pagination" class="pagination"></div>
     </div>
 
     <!-- ALL APPLICATIONS -->
@@ -206,6 +222,7 @@
         </div>
         <div id="msg-applications"></div>
         <div class="table-wrapper"><div id="applications-container"><div class="loading">Loading...</div></div></div>
+        <div id="apps-pagination" class="pagination"></div>
     </div>
 
 </div>
@@ -282,25 +299,44 @@
     // ── Overview ───────────────────────────────────────
     async function loadOverview() {
         try {
-            const [s, c, j, a] = await Promise.allSettled([
+            const [students, companies, jobsData, appsData] = await Promise.allSettled([
                 api.get('/students/'),
                 api.get('/companies/'),
-                api.get('/jobs/all'),
-                api.get('/applications/all')
+                api.get('/jobs/all?page=1&page_size=1'),       // only need total count
+                api.get('/applications/all?page=1&page_size=5') // need total + recent 5
             ]);
 
-            allStudents     = s.status === 'fulfilled' ? s.value : [];
-            allCompanies    = c.status === 'fulfilled' ? c.value : [];
-            allJobs         = j.status === 'fulfilled' ? j.value : [];
-            allApplications = a.status === 'fulfilled' ? a.value : [];
+            // Promise.allSettled never throws — check each result individually
+            allStudents  = students.status  === 'fulfilled' ? students.value  : [];
+            allCompanies = companies.status === 'fulfilled' ? companies.value : [];
+
+            // /jobs/all and /applications/all now return PaginatedResponse
+            // { items: [...], total: 47, page: 1, page_size: 1, total_pages: 47 }
+            const jobsMeta  = jobsData.status  === 'fulfilled' ? jobsData.value  : { total: 0, items: [] };
+            const appsMeta  = appsData.status  === 'fulfilled' ? appsData.value  : { total: 0, items: [] };
+
+            // For pending count: fetch pending jobs separately (small request)
+            let pendingCount = 0;
+            try {
+                const pendingData = await api.get('/jobs/pending?page=1&page_size=1');
+                pendingCount = pendingData.total;
+            } catch { pendingCount = '—'; }
 
             document.getElementById('stat-students').textContent     = allStudents.length;
             document.getElementById('stat-companies').textContent    = allCompanies.length;
-            document.getElementById('stat-pending').textContent      = allJobs.filter(j => j.status === 'pending').length;
-            document.getElementById('stat-applications').textContent = allApplications.length;
-            document.getElementById('stat-accepted').textContent     = allApplications.filter(a => a.status === 'accepted').length;
+            document.getElementById('stat-pending').textContent      = pendingCount;
+            document.getElementById('stat-applications').textContent = appsMeta.total;
 
-            const recent = allApplications.slice(-5).reverse();
+            // accepted count: use status filter — only fetches total, not items
+            try {
+                const acceptedData = await api.get('/applications/all?page=1&page_size=1&status=accepted');
+                document.getElementById('stat-accepted').textContent = acceptedData.total;
+            } catch {
+                document.getElementById('stat-accepted').textContent = '—';
+            }
+
+            // Recent applications = last 5 from the page_size=5 fetch
+            const recent = [...(appsMeta.items || [])].reverse();
             document.getElementById('recent-applications').innerHTML = !recent.length
                 ? `<div class="empty-state">No applications yet</div>`
                 : `<table>
@@ -319,7 +355,8 @@
     // ── Pending Jobs ───────────────────────────────────
     async function loadPendingJobs() {
         try {
-            pendingJobs = await api.get('/jobs/pending');
+            const data = await api.get('/jobs/pending?page=1&page_size=50');
+            pendingJobs = data.items;   // unwrap PaginatedResponse
             renderPendingJobs(pendingJobs);
         } catch {
             document.getElementById('pending-jobs-container').innerHTML =
@@ -529,11 +566,22 @@
         ));
     });
 
-    // ── All Jobs ───────────────────────────────────────
-    async function loadJobs() {
+    // ── All Jobs (paginated) ──────────────────────────
+    let jobsPage = 1;
+    const JOBS_PAGE_SIZE = 15;
+    let jobsSearch = '';
+    let jobsStatus = '';
+
+    async function loadJobs(page = 1) {
+        jobsPage = page;
+        document.getElementById('jobs-container').innerHTML = '<div class="loading">Loading...</div>';
+        document.getElementById('jobs-pagination').innerHTML = '';
         try {
-            allJobs = await api.get('/jobs/all');
-            renderJobs(allJobs);
+            const params = new URLSearchParams({ page: jobsPage, page_size: JOBS_PAGE_SIZE });
+            const data = await api.get(`/jobs/all?${params}`);
+            allJobs = data.items;
+            renderJobs(data.items);
+            renderJobsPagination(data.page, data.total_pages, data.total);
         } catch {
             document.getElementById('jobs-container').innerHTML =
                 `<div class="empty-state">❌ Failed to load jobs</div>`;
@@ -542,11 +590,15 @@
 
     function renderJobs(list) {
         const c = document.getElementById('jobs-container');
-        if (!list.length) { c.innerHTML = `<div class="empty-state">No jobs found</div>`; return; }
+        const filtered = list.filter(j =>
+            j.title.toLowerCase().includes(jobsSearch) &&
+            (!jobsStatus || j.status === jobsStatus)
+        );
+        if (!filtered.length) { c.innerHTML = `<div class="empty-state">No jobs found</div>`; return; }
         c.innerHTML = `
             <table>
                 <thead><tr><th>ID</th><th>Title</th><th>Type</th><th>Location</th><th>Company ID</th><th>Status</th><th>Deadline</th></tr></thead>
-                <tbody>${list.map(job => `<tr>
+                <tbody>${filtered.map(job => `<tr>
                     <td>#${job.id}</td>
                     <td>${job.title}</td>
                     <td><span class="status-badge badge-${job.job_type}">${job.job_type.replace('_',' ')}</span></td>
@@ -558,22 +610,47 @@
             </table>`;
     }
 
-    document.getElementById('search-jobs').addEventListener('input', applyJobFilters);
-    document.getElementById('filter-job-status').addEventListener('change', applyJobFilters);
-
-    function applyJobFilters() {
-        const s = document.getElementById('search-jobs').value.toLowerCase();
-        const st = document.getElementById('filter-job-status').value;
-        renderJobs(allJobs.filter(j =>
-            j.title.toLowerCase().includes(s) && (!st || j.status === st)
-        ));
+    function renderJobsPagination(page, totalPages, total) {
+        const el = document.getElementById('jobs-pagination');
+        if (totalPages <= 1) { el.innerHTML = ''; return; }
+        const pages = [];
+        for (let i = 1; i <= totalPages; i++) {
+            if (i===1||i===totalPages||(i>=page-1&&i<=page+1)) pages.push(i);
+            else if (pages[pages.length-1]!=='...') pages.push('...');
+        }
+        el.innerHTML = `
+            <button class="page-btn" id="jprev" ${page===1?'disabled':''}>← Prev</button>
+            ${pages.map(p=>p==='...'?`<span class="page-info">...</span>`:`<button class="page-btn ${p===page?'active':''}" data-p="${p}">${p}</button>`).join('')}
+            <button class="page-btn" id="jnext" ${page===totalPages?'disabled':''}>Next →</button>
+            <span class="page-info">${total} jobs total</span>
+        `;
+        document.getElementById('jprev').addEventListener('click',()=>loadJobs(page-1));
+        document.getElementById('jnext').addEventListener('click',()=>loadJobs(page+1));
+        el.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click',()=>loadJobs(parseInt(b.dataset.p))));
     }
 
-    // ── All Applications ───────────────────────────────
-    async function loadApplications() {
+    document.getElementById('search-jobs').addEventListener('input', function() {
+        jobsSearch = this.value.toLowerCase(); loadJobs(1);
+    });
+    document.getElementById('filter-job-status').addEventListener('change', function() {
+        jobsStatus = this.value; loadJobs(1);
+    });
+
+    // ── All Applications (paginated) ──────────────────
+    let appsPage = 1;
+    const APPS_PAGE_SIZE = 15;
+    let appsStatus = '';
+
+    async function loadApplications(page = 1) {
+        appsPage = page;
+        document.getElementById('applications-container').innerHTML = '<div class="loading">Loading...</div>';
+        document.getElementById('apps-pagination').innerHTML = '';
         try {
-            allApplications = await api.get('/applications/all');
-            renderApplications(allApplications);
+            const params = new URLSearchParams({ page: appsPage, page_size: APPS_PAGE_SIZE });
+            const data = await api.get(`/applications/all?${params}`);
+            allApplications = data.items;
+            renderApplications(data.items);
+            renderAppsPagination(data.page, data.total_pages, data.total);
         } catch {
             document.getElementById('applications-container').innerHTML =
                 `<div class="empty-state">❌ Failed to load applications</div>`;
@@ -582,11 +659,12 @@
 
     function renderApplications(list) {
         const c = document.getElementById('applications-container');
-        if (!list.length) { c.innerHTML = `<div class="empty-state">No applications found</div>`; return; }
+        const filtered = !appsStatus ? list : list.filter(a => a.status === appsStatus);
+        if (!filtered.length) { c.innerHTML = `<div class="empty-state">No applications found</div>`; return; }
         c.innerHTML = `
             <table>
                 <thead><tr><th>ID</th><th>Student</th><th>Job</th><th>Status</th><th>Applied</th><th>Update</th></tr></thead>
-                <tbody>${list.map(app => `<tr>
+                <tbody>${filtered.map(app => `<tr>
                     <td>#${app.id}</td>
                     <td>Student #${app.student_id}</td>
                     <td>Job #${app.job_id}</td>
@@ -603,15 +681,32 @@
                     </td>
                 </tr>`).join('')}</tbody>
             </table>`;
-
         c.querySelectorAll('.status-select').forEach(sel => {
             sel.addEventListener('change', () => updateAppStatus(parseInt(sel.dataset.appId), sel.value));
         });
     }
 
+    function renderAppsPagination(page, totalPages, total) {
+        const el = document.getElementById('apps-pagination');
+        if (totalPages <= 1) { el.innerHTML = ''; return; }
+        const pages = [];
+        for (let i = 1; i <= totalPages; i++) {
+            if (i===1||i===totalPages||(i>=page-1&&i<=page+1)) pages.push(i);
+            else if (pages[pages.length-1]!=='...') pages.push('...');
+        }
+        el.innerHTML = `
+            <button class="page-btn" id="aprev" ${page===1?'disabled':''}>← Prev</button>
+            ${pages.map(p=>p==='...'?`<span class="page-info">...</span>`:`<button class="page-btn ${p===page?'active':''}" data-p="${p}">${p}</button>`).join('')}
+            <button class="page-btn" id="anext" ${page===totalPages?'disabled':''}>Next →</button>
+            <span class="page-info">${total} applications total</span>
+        `;
+        document.getElementById('aprev').addEventListener('click',()=>loadApplications(page-1));
+        document.getElementById('anext').addEventListener('click',()=>loadApplications(page+1));
+        el.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click',()=>loadApplications(parseInt(b.dataset.p))));
+    }
+
     document.getElementById('filter-app-status').addEventListener('change', function() {
-        const st = this.value;
-        renderApplications(!st ? allApplications : allApplications.filter(a => a.status === st));
+        appsStatus = this.value; loadApplications(1);
     });
 
     async function updateAppStatus(appId, newStatus) {

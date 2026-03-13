@@ -130,6 +130,21 @@
         .msg { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 1rem; }
         .msg.error { background: #fee2e2; color: #ef4444; }
         .msg.success { background: #dcfce7; color: #16a34a; }
+
+        /* ── Pagination ── */
+        .pagination {
+            display: flex; align-items: center; justify-content: center;
+            gap: 0.5rem; margin-top: 1.5rem; flex-wrap: wrap;
+        }
+        .page-btn {
+            padding: 0.4rem 0.85rem; border: 1px solid #e2e8f0; background: white;
+            border-radius: 6px; font-size: 0.82rem; font-weight: 500; cursor: pointer;
+            color: #475569; transition: all 0.15s;
+        }
+        .page-btn:hover:not(:disabled) { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+        .page-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
+        .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .page-info { font-size: 0.82rem; color: #64748b; padding: 0 0.5rem; }
     </style>
 </head>
 <body>
@@ -164,6 +179,7 @@
         <div id="jobs-container" class="job-grid">
             <div class="loading">Loading jobs...</div>
         </div>
+        <div id="pagination" class="pagination"></div>
     </div>
 
     <!-- APPLICATIONS -->
@@ -240,7 +256,12 @@
     if (!token) { window.location.href = 'index.html'; }
     else { setToken(token); }
 
-    let allJobs = [];
+    // ── Pagination state ──────────────────────────────
+    // These 3 variables track where we are in the paginated list
+    let currentPage = 1;
+    const PAGE_SIZE = 9;            // 9 cards fits nicely in a 3-col grid
+    let currentSearch = '';
+    let currentType   = '';
 
     // ── Tabs ───────────────────────────────────────────
     document.getElementById('tab-jobs').addEventListener('click', function() { switchTab('jobs', this); });
@@ -263,23 +284,49 @@
         window.location.href = 'index.html';
     });
 
-    // ── Jobs ───────────────────────────────────────────
-    async function loadJobs() {
+    // ── Jobs with Pagination ───────────────────────────
+    async function loadJobs(page = 1) {
+        currentPage = page;
+        const container = document.getElementById('jobs-container');
+        container.innerHTML = '<div class="loading">Loading jobs...</div>';
+        document.getElementById('pagination').innerHTML = '';
+
         try {
-            allJobs = await api.get('/jobs/');
-            renderJobs(allJobs);
+            // Build URL with pagination + search params
+            // Backend receives: GET /jobs/?page=1&page_size=9
+            const params = new URLSearchParams({
+                page:      currentPage,
+                page_size: PAGE_SIZE,
+            });
+
+            // NOTE: search/filter is still done client-side on current page
+            // For production you'd pass these to backend too: ?title=python&job_type=internship
+
+            const data = await api.get(`/jobs/?${params}`);
+            // data = { items: [...], total: 47, page: 1, page_size: 9, total_pages: 6 }
+
+            renderJobs(data.items);
+            renderPagination(data.page, data.total_pages, data.total);
         } catch {
-            document.getElementById('jobs-container').innerHTML = `<div class="empty-state">❌ Failed to load jobs</div>`;
+            container.innerHTML = '<div class="empty-state">❌ Failed to load jobs</div>';
         }
     }
 
     function renderJobs(jobs) {
         const c = document.getElementById('jobs-container');
-        if (!jobs.length) {
-            c.innerHTML = `<div class="empty-state"><div style="font-size:2rem">📭</div><p>No jobs available</p></div>`;
+
+        // Apply client-side search/filter on current page's items
+        const filtered = jobs.filter(j =>
+            (j.title.toLowerCase().includes(currentSearch) ||
+             (j.location||'').toLowerCase().includes(currentSearch)) &&
+            (!currentType || j.job_type === currentType)
+        );
+
+        if (!filtered.length) {
+            c.innerHTML = '<div class="empty-state"><div style="font-size:2rem">📭</div><p>No jobs found</p></div>';
             return;
         }
-        c.innerHTML = jobs.map(job => `
+        c.innerHTML = filtered.map(job => `
             <div class="job-card" data-id="${job.id}">
                 <div class="job-card-header">
                     <div class="job-title">${job.title}</div>
@@ -288,8 +335,12 @@
                 <div class="job-company">🏢 Company #${job.company_id}</div>
                 <div class="job-location">📍 ${job.location || 'Location not specified'}</div>
                 <div class="job-footer">
-                    <span class="job-salary">${job.salary_min && job.salary_max ? `$${job.salary_min} – $${job.salary_max}` : 'Salary not specified'}</span>
-                    <span class="job-deadline">${job.deadline ? `Due ${new Date(job.deadline).toLocaleDateString()}` : 'No deadline'}</span>
+                    <span class="job-salary">${job.salary_min && job.salary_max
+                        ? `${Number(job.salary_min).toLocaleString()} – ${Number(job.salary_max).toLocaleString()} VND`
+                        : 'Salary not specified'}</span>
+                    <span class="job-deadline">${job.deadline
+                        ? `Due ${new Date(job.deadline).toLocaleDateString()}`
+                        : 'No deadline'}</span>
                 </div>
             </div>
         `).join('');
@@ -298,17 +349,50 @@
         });
     }
 
-    document.getElementById('search-input').addEventListener('input', filterJobs);
-    document.getElementById('filter-type').addEventListener('change', filterJobs);
+    function renderPagination(page, totalPages, total) {
+        const el = document.getElementById('pagination');
+        if (totalPages <= 1) { el.innerHTML = ''; return; }
 
-    function filterJobs() {
-        const s = document.getElementById('search-input').value.toLowerCase();
-        const t = document.getElementById('filter-type').value;
-        renderJobs(allJobs.filter(j =>
-            (j.title.toLowerCase().includes(s) || (j.location||'').toLowerCase().includes(s)) &&
-            (!t || j.job_type === t)
-        ));
+        // Build page number buttons
+        // Always show: Prev, first page, ..., current±1, ..., last page, Next
+        const pages = [];
+        for (let i = 1; i <= totalPages; i++) {
+            if (
+                i === 1 || i === totalPages ||          // always show first & last
+                (i >= page - 1 && i <= page + 1)        // show current ±1
+            ) {
+                pages.push(i);
+            } else if (pages[pages.length - 1] !== '...') {
+                pages.push('...');                       // collapse middle pages
+            }
+        }
+
+        el.innerHTML = `
+            <button class="page-btn" id="btn-prev" ${page === 1 ? 'disabled' : ''}>← Prev</button>
+            ${pages.map(p => p === '...'
+                ? `<span class="page-info">...</span>`
+                : `<button class="page-btn ${p === page ? 'active' : ''}" data-page="${p}">${p}</button>`
+            ).join('')}
+            <button class="page-btn" id="btn-next" ${page === totalPages ? 'disabled' : ''}>Next →</button>
+            <span class="page-info">${total} jobs total</span>
+        `;
+
+        document.getElementById('btn-prev').addEventListener('click', () => loadJobs(page - 1));
+        document.getElementById('btn-next').addEventListener('click', () => loadJobs(page + 1));
+        el.querySelectorAll('[data-page]').forEach(btn => {
+            btn.addEventListener('click', () => loadJobs(parseInt(btn.dataset.page)));
+        });
     }
+
+    // Search/filter resets to page 1 and reloads from server
+    document.getElementById('search-input').addEventListener('input', function() {
+        currentSearch = this.value.toLowerCase();
+        loadJobs(1);    // reset to page 1 when searching
+    });
+    document.getElementById('filter-type').addEventListener('change', function() {
+        currentType = this.value;
+        loadJobs(1);    // reset to page 1 when filtering
+    });
 
     // ── Job Modal ──────────────────────────────────────
     async function openJob(jobId) {

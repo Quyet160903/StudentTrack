@@ -1,9 +1,15 @@
 """
 StudentTrack — Seed Script
-Run: python seed.py
+Run from backend/ folder: python seed.py
+
+Data:
+  1  coordinator
+  5  companies (TechViet, FPT, VinGroup, MoMo, Tiki)
+  8  students
+  30 job postings (25 OPEN, 3 PENDING, 1 APPROVED, 1 REJECTED)
+  20 applications
 """
-import sys
-import os
+import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app.db.database import SessionLocal
@@ -20,401 +26,177 @@ from datetime import datetime, timedelta
 
 def seed():
     db = SessionLocal()
-
     print("🌱 Starting seed...")
 
-    # ── Check already seeded ───────────────────────────
     if db.query(User).count() > 0:
         print("⚠️  Database already has data. Skipping seed.")
-        print("   To reseed, clear all tables first.")
+        print("   To reseed: truncate all tables and run again.")
         db.close()
         return
 
-    # ══════════════════════════════════════════════════
-    # 1. COORDINATOR (Admin)
-    # ══════════════════════════════════════════════════
-    coord_user = User(
-        email="admin@studenttrack.com",
-        password_hash=hash_password("admin123"),
-        role=UserRole.COORDINATOR,
-        is_active=True
-    )
-    db.add(coord_user)
-    db.commit()
-    db.refresh(coord_user)
-
-    coordinator = Coordinator(
-        user_id=coord_user.id,
-        full_name="Dr. Nguyen Van An",
-        department="Career Development Center",
-        phone="0901234567"
-    )
-    db.add(coordinator)
+    # ── 1. COORDINATOR ────────────────────────────────────
+    coord_user = User(email="admin@studenttrack.com",
+                      password_hash=hash_password("admin123"),
+                      role=UserRole.COORDINATOR, is_active=True)
+    db.add(coord_user); db.commit(); db.refresh(coord_user)
+    db.add(Coordinator(user_id=coord_user.id, full_name="Dr. Nguyen Van An",
+                       department="Career Development Center", phone="0901234567"))
     db.commit()
     print("✅ Coordinator created")
 
-    # ══════════════════════════════════════════════════
-    # 2. COMPANIES
-    # ══════════════════════════════════════════════════
-    companies_data = [
-        {
-            "email": "hr@techviet.com",
-            "name": "TechViet Solutions",
-            "description": "Leading software development company in Vietnam specializing in fintech and e-commerce solutions.",
-            "website": "https://techviet.com",
-            "location": "Ho Chi Minh City",
-            "contact_email": "hr@techviet.com",
-            "contact_phone": "0281234567",
-        },
-        {
-            "email": "recruit@fpt.com",
-            "name": "FPT Software",
-            "description": "Vietnam's largest IT company with global presence in 29 countries.",
-            "website": "https://fptsoftware.com",
-            "location": "Ha Noi",
-            "contact_email": "recruit@fpt.com",
-            "contact_phone": "0247654321",
-        },
-        {
-            "email": "jobs@vingroup.net",
-            "name": "VinGroup Technology",
-            "description": "Technology division of Vietnam's largest private conglomerate.",
-            "website": "https://vingroup.net",
-            "location": "Ho Chi Minh City",
-            "contact_email": "jobs@vingroup.net",
-            "contact_phone": "0289876543",
-        },
+    # ── 2. COMPANIES ──────────────────────────────────────
+    companies_raw = [
+        ("hr@techviet.com",    "TechViet Solutions",   "Ho Chi Minh City", "https://techviet.com",     "Leading fintech & e-commerce software house."),
+        ("recruit@fpt.com",    "FPT Software",         "Ha Noi",           "https://fptsoftware.com",   "Vietnam's largest IT company, 29 countries."),
+        ("jobs@vingroup.net",  "VinGroup Technology",  "Ho Chi Minh City", "https://vingroup.net",      "Tech division of Vietnam's largest conglomerate."),
+        ("talent@momo.vn",     "MoMo E-Wallet",        "Ho Chi Minh City", "https://momo.vn",           "Vietnam's leading fintech platform, 31M users."),
+        ("careers@tiki.vn",    "Tiki Corporation",     "Ho Chi Minh City", "https://tiki.vn",           "Top e-commerce platform, technology-first."),
     ]
-
     company_objects = []
-    for c in companies_data:
-        user = User(
-            email=c["email"],
-            password_hash=hash_password("company123"),
-            role=UserRole.COMPANY,
-            is_active=True
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-
-        company = Company(
-            user_id=user.id,
-            name=c["name"],
-            description=c["description"],
-            website=c["website"],
-            location=c["location"],
-            contact_email=c["contact_email"],
-            contact_phone=c["contact_phone"],
-        )
-        db.add(company)
-        db.commit()
-        db.refresh(company)
-        company_objects.append(company)
-
+    for email, name, loc, web, desc in companies_raw:
+        u = User(email=email, password_hash=hash_password("company123"),
+                 role=UserRole.COMPANY, is_active=True)
+        db.add(u); db.commit(); db.refresh(u)
+        c = Company(user_id=u.id, name=name, description=desc,
+                    website=web, location=loc, contact_email=email)
+        db.add(c); db.commit(); db.refresh(c)
+        company_objects.append(c)
     print(f"✅ {len(company_objects)} companies created")
+    tv, fpt, vin, mo, tk = company_objects
 
-    # ══════════════════════════════════════════════════
-    # 3. STUDENTS
-    # ══════════════════════════════════════════════════
-    students_data = [
-        {
-            "email": "minh.nguyen@student.edu.vn",
-            "full_name": "Nguyen Thanh Minh",
-            "student_id": "SE210001",
-            "major": "Software Engineering",
-            "gpa": 3.8,
-            "phone": "0901111111",
-            "graduation_year": 2025,
-            "bio": "Passionate backend developer with strong Python and FastAPI skills. Looking for internship opportunities.",
-            "resume_url": "https://drive.google.com/resume-minh"
-        },
-        {
-            "email": "linh.tran@student.edu.vn",
-            "full_name": "Tran Thi Linh",
-            "student_id": "SE210002",
-            "major": "Computer Science",
-            "gpa": 3.5,
-            "phone": "0902222222",
-            "graduation_year": 2025,
-            "bio": "Frontend developer interested in UI/UX design and React development.",
-            "resume_url": "https://drive.google.com/resume-linh"
-        },
-        {
-            "email": "huy.le@student.edu.vn",
-            "full_name": "Le Van Huy",
-            "student_id": "SE210003",
-            "major": "Information Technology",
-            "gpa": 3.2,
-            "phone": "0903333333",
-            "graduation_year": 2026,
-            "bio": "Full-stack developer with experience in Node.js and Vue.js.",
-            "resume_url": "https://drive.google.com/resume-huy"
-        },
-        {
-            "email": "an.pham@student.edu.vn",
-            "full_name": "Pham Thi An",
-            "student_id": "SE210004",
-            "major": "Software Engineering",
-            "gpa": 3.9,
-            "phone": "0904444444",
-            "graduation_year": 2025,
-            "bio": "AI/ML enthusiast with Python and TensorFlow experience. Dean's list student.",
-            "resume_url": "https://drive.google.com/resume-an"
-        },
-        {
-            "email": "khoa.vo@student.edu.vn",
-            "full_name": "Vo Minh Khoa",
-            "student_id": "SE210005",
-            "major": "Computer Science",
-            "gpa": 3.0,
-            "phone": "0905555555",
-            "graduation_year": 2026,
-            "bio": "Backend developer learning cloud infrastructure and DevOps practices.",
-            "resume_url": "https://drive.google.com/resume-khoa"
-        },
+    # ── 3. STUDENTS ───────────────────────────────────────
+    students_raw = [
+        ("minh.nguyen@student.edu.vn", "Nguyen Thanh Minh", "SE210001", "Software Engineering",  3.8, 2025, "Backend dev, Python & FastAPI."),
+        ("linh.tran@student.edu.vn",   "Tran Thi Linh",     "SE210002", "Computer Science",       3.5, 2025, "Frontend dev, React & UI/UX."),
+        ("huy.le@student.edu.vn",      "Le Van Huy",         "SE210003", "Information Technology", 3.2, 2026, "Full-stack, Node.js & Vue.js."),
+        ("an.pham@student.edu.vn",     "Pham Thi An",        "SE210004", "Software Engineering",   3.9, 2025, "AI/ML, TensorFlow & PyTorch."),
+        ("khoa.vo@student.edu.vn",     "Vo Minh Khoa",       "SE210005", "Computer Science",       3.0, 2026, "Backend, learning DevOps."),
+        ("tuan.nguyen@student.edu.vn", "Nguyen Duc Tuan",    "SE210006", "Software Engineering",   3.6, 2025, "Mobile dev, Flutter & RN."),
+        ("mai.le@student.edu.vn",      "Le Thi Mai",         "SE210007", "Data Science",           3.7, 2025, "Data scientist, Python & SQL."),
+        ("long.pham@student.edu.vn",   "Pham Hoang Long",    "SE210008", "Computer Science",       3.4, 2026, "Security, CTF enthusiast."),
     ]
-
     student_objects = []
-    for s in students_data:
-        user = User(
-            email=s["email"],
-            password_hash=hash_password("student123"),
-            role=UserRole.STUDENT,
-            is_active=True
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-
-        student = Student(
-            user_id=user.id,
-            full_name=s["full_name"],
-            student_id=s["student_id"],
-            major=s["major"],
-            gpa=s["gpa"],
-            phone=s["phone"],
-            graduation_year=s["graduation_year"],
-            bio=s["bio"],
-            resume_url=s["resume_url"]
-        )
-        db.add(student)
-        db.commit()
-        db.refresh(student)
-        student_objects.append(student)
-
+    for email, name, sid, major, gpa, grad, bio in students_raw:
+        u = User(email=email, password_hash=hash_password("student123"),
+                 role=UserRole.STUDENT, is_active=True)
+        db.add(u); db.commit(); db.refresh(u)
+        s = Student(user_id=u.id, full_name=name, student_id=sid, major=major,
+                    gpa=gpa, graduation_year=grad, bio=bio,
+                    phone=f"090{sid[-4:]}",
+                    resume_url=f"https://drive.google.com/resume-{email.split('.')[0]}")
+        db.add(s); db.commit(); db.refresh(s)
+        student_objects.append(s)
     print(f"✅ {len(student_objects)} students created")
 
-    # ══════════════════════════════════════════════════
-    # 4. JOB POSTINGS
-    # ══════════════════════════════════════════════════
+    # ── 4. JOBS (30 total) ────────────────────────────────
+    D = lambda n: datetime.utcnow() + timedelta(days=n)
+    O, I, F, P = JobStatus.OPEN, JobType.INTERNSHIP, JobType.FULL_TIME, JobType.PART_TIME
+
     jobs_data = [
-        {
-            "company": company_objects[0],  # TechViet
-            "title": "Python Backend Developer Intern",
-            "description": "Join our backend team to build scalable REST APIs using Python and FastAPI. Work on real fintech products used by thousands of users.",
-            "requirements": "4th-year student in CS/SE/IT. Strong Python skills. Knowledge of SQL and Git. FastAPI or Django experience is a plus.",
-            "location": "Ho Chi Minh City",
-            "job_type": JobType.INTERNSHIP,
-            "salary_min": 5000000,
-            "salary_max": 8000000,
-            "status": JobStatus.OPEN,
-            "deadline": datetime.utcnow() + timedelta(days=30),
-        },
-        {
-            "company": company_objects[0],  # TechViet
-            "title": "Junior Full-Stack Developer",
-            "description": "We are looking for a full-stack developer to join our product team. You will work on both frontend and backend features.",
-            "requirements": "Fresh graduate or 1 year experience. React, Node.js or Python. Good understanding of databases.",
-            "location": "Ho Chi Minh City",
-            "job_type": JobType.FULL_TIME,
-            "salary_min": 12000000,
-            "salary_max": 18000000,
-            "status": JobStatus.OPEN,
-            "deadline": datetime.utcnow() + timedelta(days=45),
-        },
-        {
-            "company": company_objects[1],  # FPT
-            "title": "Software Engineer Intern",
-            "description": "FPT Software internship program — 4 months working on enterprise software projects with mentorship from senior engineers.",
-            "requirements": "3rd or 4th year CS/SE student. Java or Python. Good English communication skills.",
-            "location": "Ha Noi",
-            "job_type": JobType.INTERNSHIP,
-            "salary_min": 4000000,
-            "salary_max": 6000000,
-            "status": JobStatus.OPEN,
-            "deadline": datetime.utcnow() + timedelta(days=20),
-        },
-        {
-            "company": company_objects[1],  # FPT
-            "title": "Data Analyst — Part Time",
-            "description": "Analyze business data and create reports to support decision making. Flexible working hours suitable for students.",
-            "requirements": "SQL proficiency required. Python or R for data analysis. Tableau or Power BI is a plus.",
-            "location": "Ha Noi",
-            "job_type": JobType.PART_TIME,
-            "salary_min": 6000000,
-            "salary_max": 9000000,
-            "status": JobStatus.OPEN,
-            "deadline": datetime.utcnow() + timedelta(days=25),
-        },
-        {
-            "company": company_objects[2],  # VinGroup
-            "title": "AI/ML Engineer Intern",
-            "description": "Work with our AI team on computer vision and NLP projects. Access to cutting-edge infrastructure and datasets.",
-            "requirements": "Strong Python. Experience with TensorFlow or PyTorch. Mathematics background (linear algebra, statistics).",
-            "location": "Ho Chi Minh City",
-            "job_type": JobType.INTERNSHIP,
-            "salary_min": 7000000,
-            "salary_max": 10000000,
-            "status": JobStatus.OPEN,
-            "deadline": datetime.utcnow() + timedelta(days=15),
-        },
-        {
-            "company": company_objects[2],  # VinGroup
-            "title": "DevOps Engineer",
-            "description": "Manage CI/CD pipelines, cloud infrastructure on AWS, and container orchestration with Kubernetes.",
-            "requirements": "1+ year experience. Docker, Kubernetes, AWS or GCP. Strong Linux skills.",
-            "location": "Ho Chi Minh City",
-            "job_type": JobType.FULL_TIME,
-            "salary_min": 20000000,
-            "salary_max": 30000000,
-            "status": JobStatus.DRAFT,
-            "deadline": datetime.utcnow() + timedelta(days=60),
-        },
+        # TechViet (6)
+        (tv,  "Python Backend Developer Intern",        I, "Ho Chi Minh City",  5e6,  8e6, O, D(30), None),
+        (tv,  "Junior Full-Stack Developer",            F, "Ho Chi Minh City", 12e6, 18e6, O, D(45), None),
+        (tv,  "React Frontend Developer",               F, "Ho Chi Minh City", 15e6, 22e6, O, D(40), None),
+        (tv,  "QA Engineer — Part Time",                P, "Ho Chi Minh City",  6e6,  9e6, O, D(20), None),
+        (tv,  "Database Administrator Intern",          I, "Ho Chi Minh City",  4e6,  6e6, O, D(25), None),
+        (tv,  "Cloud Infrastructure Engineer",          F, "Ho Chi Minh City", 25e6, 35e6, O, D(60), None),
+        # FPT (6)
+        (fpt, "Software Engineer Intern",               I, "Ha Noi",             4e6,  6e6, O, D(20), None),
+        (fpt, "Data Analyst — Part Time",               P, "Ha Noi",             6e6,  9e6, O, D(25), None),
+        (fpt, "Java Backend Engineer",                  F, "Ha Noi",            18e6, 28e6, O, D(35), None),
+        (fpt, "Business Analyst Intern",                I, "Ha Noi",             3e6,  5e6, O, D(18), None),
+        (fpt, "Mobile Developer — React Native",        F, "Ha Noi",            20e6, 30e6, O, D(50), None),
+        (fpt, "Technical Writer — Part Time",           P, "Ha Noi",             5e6,  7e6, O, D(15), None),
+        # VinGroup (5)
+        (vin, "AI/ML Engineer Intern",                  I, "Ho Chi Minh City",   7e6, 10e6, O, D(15), None),
+        (vin, "DevOps Engineer",                        F, "Ho Chi Minh City",  20e6, 30e6, O, D(60), None),
+        (vin, "Data Engineer",                          F, "Ha Noi",            22e6, 32e6, O, D(40), None),
+        (vin, "Cybersecurity Analyst Intern",           I, "Ho Chi Minh City",   5e6,  8e6, O, D(22), None),
+        (vin, "Product Manager — Associate",            F, "Ho Chi Minh City",  18e6, 28e6, O, D(55), None),
+        # MoMo (6)
+        (mo,  "iOS Developer Intern",                   I, "Ho Chi Minh City",   6e6,  9e6, O, D(28), None),
+        (mo,  "Android Developer",                      F, "Ho Chi Minh City",  20e6, 32e6, O, D(45), None),
+        (mo,  "Machine Learning Engineer",              F, "Ho Chi Minh City",  28e6, 45e6, O, D(50), None),
+        (mo,  "UI/UX Designer Intern",                  I, "Ho Chi Minh City",   4e6,  6e6, O, D(20), None),
+        (mo,  "Backend Engineer — Payment Systems",     F, "Ho Chi Minh City",  35e6, 55e6, O, D(60), None),
+        (mo,  "Data Scientist — Part Time",             P, "Ho Chi Minh City",   8e6, 12e6, O, D(30), None),
+        # Tiki (4 OPEN)
+        (tk,  "E-commerce Platform Engineer",           F, "Ho Chi Minh City",  25e6, 40e6, O, D(45), None),
+        (tk,  "Logistics Tech Intern",                  I, "Ho Chi Minh City",   5e6,  7e6, O, D(25), None),
+        (tk,  "Search & Recommendation Engineer",       F, "Ho Chi Minh City",  30e6, 45e6, O, D(55), None),
+        (tk,  "Frontend Engineer — Next.js",            F, "Ho Chi Minh City",  20e6, 32e6, O, D(40), None),
+        # Non-OPEN (3 PENDING, 1 APPROVED, 1 REJECTED)
+        (tk,  "Blockchain Engineer",                    F, "Ho Chi Minh City",  30e6, 50e6, JobStatus.PENDING,  D(60), None),
+        (mo,  "Site Reliability Engineer",              F, "Ho Chi Minh City",  35e6, 50e6, JobStatus.PENDING,  D(45), None),
+        (fpt, "Salesforce Developer",                   F, "Ha Noi",            20e6, 30e6, JobStatus.PENDING,  D(30), None),
+        (vin, "Middle AI Engineer",                     F, "Ho Chi Minh City",  20e6, 35e6, JobStatus.APPROVED, None,  None),
+        (tv,  "AR/VR Developer",                        F, "Ho Chi Minh City",  22e6, 33e6, JobStatus.REJECTED, D(30), "Description too vague. Please specify Unity version and project scope."),
     ]
 
     job_objects = []
-    for j in jobs_data:
-        job = JobPosting(
-            company_id=j["company"].id,
-            title=j["title"],
-            description=j["description"],
-            requirements=j["requirements"],
-            location=j["location"],
-            job_type=j["job_type"],
-            salary_min=j["salary_min"],
-            salary_max=j["salary_max"],
-            status=j["status"],
-            deadline=j["deadline"],
-        )
-        db.add(job)
-        db.commit()
-        db.refresh(job)
+    for co, title, jtype, loc, smin, smax, status, deadline, note in jobs_data:
+        job = JobPosting(company_id=co.id, title=title, job_type=jtype, location=loc,
+                         salary_min=smin, salary_max=smax, status=status,
+                         deadline=deadline, rejection_note=note,
+                         description=f"Position: {title} at {co.name}.",
+                         requirements="Relevant degree or equivalent experience required.")
+        db.add(job); db.commit(); db.refresh(job)
         job_objects.append(job)
 
-    print(f"✅ {len(job_objects)} job postings created")
+    open_jobs = [j for j in job_objects if j.status == JobStatus.OPEN]
+    print(f"✅ {len(job_objects)} jobs created ({len(open_jobs)} OPEN, "
+          f"{sum(1 for j in job_objects if j.status==JobStatus.PENDING)} PENDING, "
+          f"{sum(1 for j in job_objects if j.status==JobStatus.APPROVED)} APPROVED, "
+          f"{sum(1 for j in job_objects if j.status==JobStatus.REJECTED)} REJECTED)")
 
-    # ══════════════════════════════════════════════════
-    # 5. APPLICATIONS
-    # ══════════════════════════════════════════════════
-    applications_data = [
-        # Minh applies to Python Backend Intern → accepted
-        {
-            "student": student_objects[0],
-            "job": job_objects[0],
-            "cover_letter": "I am a 4th-year SE student with strong Python and FastAPI skills. I have built a full-stack project using FastAPI and PostgreSQL. I am very excited about this opportunity at TechViet.",
-            "status": ApplicationStatus.ACCEPTED,
-        },
-        # Minh applies to FPT intern → reviewing
-        {
-            "student": student_objects[0],
-            "job": job_objects[2],
-            "cover_letter": "I would love to gain experience at FPT Software. My GPA is 3.8 and I have solid Java knowledge alongside Python.",
-            "status": ApplicationStatus.REVIEWING,
-        },
-        # Linh applies to Junior Full-Stack → interview
-        {
-            "student": student_objects[1],
-            "job": job_objects[1],
-            "cover_letter": "As a CS graduate with frontend experience in React and backend in Node.js, I am confident I can contribute to your product team.",
-            "status": ApplicationStatus.INTERVIEW,
-        },
-        # Linh applies to Data Analyst → pending
-        {
-            "student": student_objects[1],
-            "job": job_objects[3],
-            "cover_letter": "I have experience with SQL and Python pandas for data analysis. I am available for part-time work on weekends.",
-            "status": ApplicationStatus.PENDING,
-        },
-        # Huy applies to FPT intern → rejected
-        {
-            "student": student_objects[2],
-            "job": job_objects[2],
-            "cover_letter": "I am a 3rd-year IT student eager to learn enterprise software development at FPT.",
-            "status": ApplicationStatus.REJECTED,
-        },
-        # An applies to AI/ML intern → interview
-        {
-            "student": student_objects[3],
-            "job": job_objects[4],
-            "cover_letter": "I have hands-on experience with TensorFlow and PyTorch from university projects. My GPA is 3.9 and I ranked top of my class in Machine Learning course.",
-            "status": ApplicationStatus.INTERVIEW,
-        },
-        # Khoa applies to Python Backend → pending
-        {
-            "student": student_objects[4],
-            "job": job_objects[0],
-            "cover_letter": "I am learning Python backend development and would love to apply my skills in a real-world environment.",
-            "status": ApplicationStatus.PENDING,
-        },
-        # An applies to Full-Stack → reviewing
-        {
-            "student": student_objects[3],
-            "job": job_objects[1],
-            "cover_letter": "Although my main strength is AI/ML, I also have solid Python backend experience and would love to grow as a full-stack developer.",
-            "status": ApplicationStatus.REVIEWING,
-        },
+    # ── 5. APPLICATIONS (20) ──────────────────────────────
+    mn, lt, lh, pa, vk, nt, lm, pl = student_objects
+    apps_data = [
+        (mn, open_jobs[0],  "4th-year SE, strong FastAPI. Built full-stack app.",              ApplicationStatus.ACCEPTED),
+        (mn, open_jobs[6],  "GPA 3.8, Java + Python. Eager for FPT projects.",                ApplicationStatus.REVIEWING),
+        (mn, open_jobs[1],  "Strong Python. Ready to expand to full-stack.",                   ApplicationStatus.INTERVIEW),
+        (lt, open_jobs[1],  "React + Node.js experience. CS graduate.",                        ApplicationStatus.INTERVIEW),
+        (lt, open_jobs[7],  "SQL + pandas. Available part-time weekends.",                     ApplicationStatus.PENDING),
+        (lt, open_jobs[2],  "2yr React, TypeScript proficient.",                               ApplicationStatus.REVIEWING),
+        (lh, open_jobs[6],  "3rd-year IT, eager to learn enterprise dev at FPT.",              ApplicationStatus.REJECTED),
+        (lh, open_jobs[24], "Interested in logistics tech and route optimization.",            ApplicationStatus.PENDING),
+        (pa, open_jobs[12], "TensorFlow + PyTorch, GPA 3.9, top ML student.",                 ApplicationStatus.INTERVIEW),
+        (pa, open_jobs[1],  "Python + AI/ML background, want to grow full-stack.",            ApplicationStatus.REVIEWING),
+        (pa, open_jobs[23], "High-performance Python experience. Love e-commerce scale.",     ApplicationStatus.PENDING),
+        (vk, open_jobs[0],  "Learning Python. Would love to grow at TechViet.",               ApplicationStatus.PENDING),
+        (vk, open_jobs[4],  "Strong SQL. Interested in database administration.",             ApplicationStatus.REVIEWING),
+        (nt, open_jobs[17], "Flutter + RN, 2 apps published on App Store.",                   ApplicationStatus.INTERVIEW),
+        (nt, open_jobs[10], "Cross-platform mobile, RN for 1.5 years.",                       ApplicationStatus.ACCEPTED),
+        (lm, open_jobs[7],  "Data science background, SQL expert, Tableau certified.",        ApplicationStatus.ACCEPTED),
+        (lm, open_jobs[14], "1yr data engineering, Spark and Airflow.",                       ApplicationStatus.REVIEWING),
+        (lm, open_jobs[22], "Python + pandas. Behavioral data analysis experience.",          ApplicationStatus.PENDING),
+        (pl, open_jobs[15], "CTF player, OWASP Top 10. Passionate about security.",           ApplicationStatus.INTERVIEW),
+        (pl, open_jobs[0],  "Python backend + security expertise combination.",               ApplicationStatus.WITHDRAWN),
     ]
 
-    application_objects = []
-    for a in applications_data:
-        application = Application(
-            student_id=a["student"].id,
-            job_id=a["job"].id,
-            cover_letter=a["cover_letter"],
-            status=a["status"],
-            applied_at=datetime.utcnow() - timedelta(days=len(application_objects) + 1)
-        )
-        db.add(application)
+    for i, (student, job, cover, status) in enumerate(apps_data):
+        app = Application(student_id=student.id, job_id=job.id,
+                          cover_letter=cover, status=status,
+                          applied_at=datetime.utcnow() - timedelta(days=len(apps_data)-i))
+        db.add(app); db.commit(); db.refresh(app)
+        db.add(ApplicationStatusLog(application_id=app.id, old_status=None,
+                                    new_status=status, changed_by=coord_user.id,
+                                    note="Set by seed"))
         db.commit()
-        db.refresh(application)
-        application_objects.append(application)
+    print(f"✅ {len(apps_data)} applications created")
 
-        # create status log
-        log = ApplicationStatusLog(
-            application_id=application.id,
-            old_status=ApplicationStatus.PENDING,
-            new_status=a["status"],
-            changed_by=coord_user.id,
-            note="Initial status set by system"
-        )
-        db.add(log)
-        db.commit()
-
-    print(f"✅ {len(application_objects)} applications created")
-
-    # ══════════════════════════════════════════════════
-    # SUMMARY
-    # ══════════════════════════════════════════════════
-    print("\n" + "="*50)
-    print("🎉 Seed completed successfully!")
-    print("="*50)
-    print("\n📋 Login accounts:")
-    print("\n[Coordinator]")
-    print("  Email:    admin@studenttrack.com")
-    print("  Password: admin123")
-    print("\n[Companies]")
-    for c in companies_data:
-        print(f"  Email:    {c['email']}")
-        print(f"  Password: company123")
-        print(f"  Name:     {c['name']}")
-    print("\n[Students]")
-    for s in students_data:
-        print(f"  Email:    {s['email']}")
-        print(f"  Password: student123")
-        print(f"  Name:     {s['full_name']}")
-    print("="*50)
-
+    # ── SUMMARY ───────────────────────────────────────────
+    print("\n" + "="*58)
+    print("🎉 Seed completed! Pagination now testable (25 OPEN jobs)")
+    print("="*58)
+    print("\n  [Coordinator]  admin@studenttrack.com / admin123")
+    print("\n  [Companies]    password: company123")
+    for email, name, *_ in companies_raw:
+        print(f"    {email:<33} {name}")
+    print("\n  [Students]     password: student123")
+    for email, name, *_ in students_raw:
+        print(f"    {email:<42} {name}")
+    print("="*58)
     db.close()
 
 
