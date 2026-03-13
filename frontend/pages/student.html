@@ -145,6 +145,48 @@
         .page-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
         .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .page-info { font-size: 0.82rem; color: #64748b; padding: 0 0.5rem; }
+
+        /* ── Log Timeline ── */
+        .log-modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45); z-index: 1100;
+            align-items: center; justify-content: center;
+        }
+        .log-modal-overlay.show { display: flex; }
+        .log-modal {
+            background: white; border-radius: 14px; padding: 1.75rem;
+            width: 100%; max-width: 520px; max-height: 80vh;
+            overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            position: relative;
+        }
+        .log-modal h3 { font-size: 1.1rem; margin-bottom: 0.25rem; }
+        .log-modal .log-subtitle { font-size: 0.8rem; color: #94a3b8; margin-bottom: 1.25rem; }
+        .log-close { position: absolute; top: 1rem; right: 1rem;
+            background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #94a3b8; }
+        .timeline { position: relative; padding-left: 1.5rem; }
+        .timeline::before { content: ''; position: absolute; left: 0.45rem; top: 0;
+            bottom: 0; width: 2px; background: #e2e8f0; }
+        .timeline-item { position: relative; margin-bottom: 1.25rem; }
+        .timeline-item:last-child { margin-bottom: 0; }
+        .timeline-dot { position: absolute; left: -1.18rem; top: 0.25rem;
+            width: 10px; height: 10px; border-radius: 50%; border: 2px solid white;
+            box-shadow: 0 0 0 2px #e2e8f0; background: #94a3b8; }
+        .timeline-dot.accepted  { background: #22c55e; box-shadow: 0 0 0 2px #bbf7d0; }
+        .timeline-dot.rejected  { background: #ef4444; box-shadow: 0 0 0 2px #fecaca; }
+        .timeline-dot.interview { background: #8b5cf6; box-shadow: 0 0 0 2px #ddd6fe; }
+        .timeline-dot.reviewing { background: #3b82f6; box-shadow: 0 0 0 2px #bfdbfe; }
+        .timeline-dot.withdrawn { background: #94a3b8; box-shadow: 0 0 0 2px #e2e8f0; }
+        .timeline-dot.pending   { background: #f59e0b; box-shadow: 0 0 0 2px #fde68a; }
+        .timeline-title { font-size: 0.875rem; font-weight: 600; color: #1e293b; }
+        .timeline-arrow { color: #94a3b8; margin: 0 0.35rem; }
+        .timeline-meta { font-size: 0.75rem; color: #94a3b8; margin-top: 0.2rem; }
+        .timeline-note { font-size: 0.78rem; color: #64748b; background: #f8fafc;
+            border-left: 3px solid #e2e8f0; padding: 0.4rem 0.6rem;
+            border-radius: 0 4px 4px 0; margin-top: 0.4rem; }
+        .btn-view-log { font-size: 0.75rem; padding: 0.25rem 0.6rem;
+            border: 1px solid #e2e8f0; border-radius: 6px; background: white;
+            cursor: pointer; color: #475569; transition: all 0.15s; }
+        .btn-view-log:hover { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
     </style>
 </head>
 <body>
@@ -475,6 +517,7 @@
                         </div>
                         <div class="app-card-right">
                             <span class="status-badge status-${app.status}">${app.status}</span>
+                            <button class="btn-view-log" data-log-id="${app.id}" data-log-title="${jobMap[app.job_id]}">📋 History</button>
                             ${!['withdrawn','accepted','rejected'].includes(app.status)
                                 ? `<button class="btn-withdraw" data-id="${app.id}">Withdraw</button>` : ''}
                         </div>
@@ -485,6 +528,9 @@
 
             document.querySelectorAll('.btn-withdraw').forEach(btn => {
                 btn.addEventListener('click', () => withdrawApp(parseInt(btn.dataset.id)));
+            });
+            document.querySelectorAll('.btn-view-log').forEach(btn => {
+                btn.addEventListener('click', () => openLogModal(parseInt(btn.dataset.logId), btn.dataset.logTitle));
             });
         } catch {
             c.innerHTML = `<div class="empty-state">❌ Failed to load</div>`;
@@ -500,7 +546,48 @@
         } catch(err) { showMsg('applications', `❌ ${err.message}`, 'error'); }
     }
 
-    // ── Profile ────────────────────────────────────────
+    // ── Log Timeline Modal ────────────────────────────
+    async function openLogModal(appId, jobTitle) {
+        document.getElementById('log-modal-title').textContent = jobTitle || `Application #${appId}`;
+        document.getElementById('log-modal-subtitle').textContent = `Application #${appId} · Status history`;
+        document.getElementById('log-timeline').innerHTML = '<div class="loading">Loading...</div>';
+        document.getElementById('log-modal').classList.add('show');
+        try {
+            const logs = await api.get(`/applications/${appId}/logs`);
+            renderTimeline(logs);
+        } catch(err) {
+            document.getElementById('log-timeline').innerHTML = `<div class="empty-state">❌ Failed to load history</div>`;
+        }
+    }
+
+    function renderTimeline(logs) {
+        const el = document.getElementById('log-timeline');
+        if (!logs.length) {
+            el.innerHTML = `<div class="empty-state" style="padding:1rem 0">No history yet</div>`;
+            return;
+        }
+        el.innerHTML = `<div class="timeline">${logs.map(log => {
+            const status = log.new_status;
+            const arrow  = log.old_status ? `<span class="timeline-arrow">→</span><strong>${log.new_status}</strong>` : `<strong>${log.new_status}</strong>`;
+            const from   = log.old_status ? `<span style="color:#94a3b8">${log.old_status}</span>${arrow}` : arrow;
+            const date   = new Date(log.changed_at).toLocaleString();
+            return `<div class="timeline-item">
+                <div class="timeline-dot ${status}"></div>
+                <div class="timeline-title">${from}</div>
+                <div class="timeline-meta">🕐 ${date}</div>
+                ${log.note ? `<div class="timeline-note">💬 ${log.note}</div>` : ''}
+            </div>`;
+        }).join('')}</div>`;
+    }
+
+    document.getElementById('log-modal-close').addEventListener('click', () => {
+        document.getElementById('log-modal').classList.remove('show');
+    });
+    document.getElementById('log-modal').addEventListener('click', function(e) {
+        if (e.target === this) this.classList.remove('show');
+    });
+
+        // ── Profile ────────────────────────────────────────
     async function loadProfile() {
         try {
             const p = await api.get('/students/profile');
@@ -543,5 +630,15 @@
     loadJobs();
     loadProfile();
 </script>
+<!-- Log Timeline Modal -->
+<div class="log-modal-overlay" id="log-modal">
+    <div class="log-modal">
+        <button class="log-close" id="log-modal-close">✕</button>
+        <h3 id="log-modal-title">Application History</h3>
+        <p class="log-subtitle" id="log-modal-subtitle"></p>
+        <div id="log-timeline"><div class="loading">Loading...</div></div>
+    </div>
+</div>
+
 </body>
 </html>
