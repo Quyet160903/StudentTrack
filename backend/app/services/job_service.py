@@ -1,11 +1,12 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Tuple
 
 from app.models.user import User
 from app.models.company import Company
 from app.models.job_posting import JobPosting, JobStatus
 from app.schemas.job import JobCreate, JobUpdate, JobApprovalAction, JobResponse
+from app.schemas.pagination import PaginationParams, PaginatedResponse
 
 
 class JobService:
@@ -26,7 +27,7 @@ class JobService:
             salary_min=request.salary_min,
             salary_max=request.salary_max,
             deadline=request.deadline,
-            status=JobStatus.PENDING,   # always force PENDING on create
+            status=JobStatus.PENDING,
         )
         db.add(job)
         db.commit()
@@ -34,31 +35,63 @@ class JobService:
         return JobResponse.model_validate(job)
 
     @staticmethod
-    def get_all(db: Session) -> List[JobResponse]:
-        """Public — students and companies browsing: only OPEN jobs."""
-        jobs = db.query(JobPosting).filter(JobPosting.status == JobStatus.OPEN).all()
-        return [JobResponse.model_validate(j) for j in jobs]
+    def get_all(db: Session, params: PaginationParams) -> PaginatedResponse[JobResponse]:
+        """Public — only OPEN jobs, paginated."""
+        # Step 1: build the base query (reused for both COUNT and data fetch)
+        query = db.query(JobPosting).filter(JobPosting.status == JobStatus.OPEN)
+
+        # Step 2: COUNT total matching rows (before applying LIMIT/OFFSET)
+        # This is what goes into total_pages calculation
+        total = query.count()
+
+        # Step 3: fetch only the rows for this page
+        # .offset() skips rows, .limit() takes only page_size rows
+        jobs = query.order_by(JobPosting.id.desc()).offset(params.offset).limit(params.page_size).all()
+
+        return PaginatedResponse.create(
+            items=[JobResponse.model_validate(j) for j in jobs],
+            total=total,
+            params=params,
+        )
 
     @staticmethod
-    def get_all_for_coordinator(db: Session) -> List[JobResponse]:
-        """Coordinator — sees every job regardless of status."""
-        jobs = db.query(JobPosting).all()
-        return [JobResponse.model_validate(j) for j in jobs]
+    def get_all_for_coordinator(db: Session, params: PaginationParams) -> PaginatedResponse[JobResponse]:
+        """Coordinator — all jobs regardless of status, paginated."""
+        query = db.query(JobPosting)
+        total = query.count()
+        jobs = query.order_by(JobPosting.id.desc()).offset(params.offset).limit(params.page_size).all()
+        return PaginatedResponse.create(
+            items=[JobResponse.model_validate(j) for j in jobs],
+            total=total,
+            params=params,
+        )
 
     @staticmethod
-    def get_pending(db: Session) -> List[JobResponse]:
-        """Coordinator — pending approval queue."""
-        jobs = db.query(JobPosting).filter(JobPosting.status == JobStatus.PENDING).all()
-        return [JobResponse.model_validate(j) for j in jobs]
+    def get_pending(db: Session, params: PaginationParams) -> PaginatedResponse[JobResponse]:
+        """Coordinator — pending approval queue, paginated."""
+        query = db.query(JobPosting).filter(JobPosting.status == JobStatus.PENDING)
+        total = query.count()
+        jobs = query.order_by(JobPosting.id.asc()).offset(params.offset).limit(params.page_size).all()
+        return PaginatedResponse.create(
+            items=[JobResponse.model_validate(j) for j in jobs],
+            total=total,
+            params=params,
+        )
 
     @staticmethod
-    def get_by_company(db: Session, current_user: User) -> List[JobResponse]:
-        """Company — their own jobs (all statuses)."""
+    def get_by_company(db: Session, current_user: User, params: PaginationParams) -> PaginatedResponse[JobResponse]:
+        """Company — their own jobs (all statuses), paginated."""
         company = db.query(Company).filter(Company.user_id == current_user.id).first()
         if not company:
             raise HTTPException(status_code=404, detail="Company profile not found")
-        jobs = db.query(JobPosting).filter(JobPosting.company_id == company.id).all()
-        return [JobResponse.model_validate(j) for j in jobs]
+        query = db.query(JobPosting).filter(JobPosting.company_id == company.id)
+        total = query.count()
+        jobs = query.order_by(JobPosting.id.desc()).offset(params.offset).limit(params.page_size).all()
+        return PaginatedResponse.create(
+            items=[JobResponse.model_validate(j) for j in jobs],
+            total=total,
+            params=params,
+        )
 
     @staticmethod
     def get_by_id(db: Session, job_id: int) -> JobResponse:
@@ -76,15 +109,32 @@ class JobService:
         if job.company_id != company.id:
             raise HTTPException(status_code=403, detail="You can only update your own jobs")
 
-        if request.status in (JobStatus.OPEN, JobStatus.CLOSED, JobStatus.DRAFT):
-            if job.status != JobStatus.APPROVED:
+        update_data = request.model_dump(exclude_none=True)
+        new_status = update_data.pop("status", None)
+
+        # ── Case 1: pure status change (no content edits) ──────────────────
+        if new_status is not None and not update_data:
+            allowed_transitions = {
+                JobStatus.APPROVED: [JobStatus.OPEN],
+                JobStatus.OPEN:     [JobStatus.CLOSED],
+                JobStatus.CLOSED:   [JobStatus.OPEN],   # reopen without re-approval
+            }
+            allowed = allowed_transitions.get(job.status, [])
+            if new_status not in allowed:
                 raise HTTPException(
                     status_code=400,
-                    detail="Job must be approved by coordinator before publishing"
+                    detail=f"Cannot change status from '{job.status.value}' to '{new_status.value}'"
                 )
+            job.status = new_status
 
-        for field, value in request.model_dump(exclude_none=True).items():
-            setattr(job, field, value)
+        # ── Case 2: content edits (with or without status) ─────────────────
+        elif update_data:
+            # editing content on a live/closed job → reset to PENDING for re-approval
+            if job.status in (JobStatus.OPEN, JobStatus.CLOSED):
+                job.status = JobStatus.PENDING
+            # editing a PENDING or REJECTED job → stay as-is (or PENDING after resubmit)
+            for field, value in update_data.items():
+                setattr(job, field, value)
 
         db.commit()
         db.refresh(job)
