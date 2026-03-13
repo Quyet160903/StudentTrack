@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudentTrack — Login</title>
+    <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <h1>StudentTrack</h1>
+            <p class="subtitle">Internship & Career Portal</p>
+
+            <!-- TABS -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('login')">Login</button>
+                <button class="tab" onclick="switchTab('register')">Register</button>
+            </div>
+
+            <!-- LOGIN FORM -->
+            <div id="login-form">
+                <input type="email" id="login-email" placeholder="Email" />
+                <input type="password" id="login-password" placeholder="Password" />
+                <button onclick="handleLogin()">Login</button>
+            </div>
+
+            <!-- REGISTER FORM -->
+            <div id="register-form" style="display:none">
+                <input type="email" id="reg-email" placeholder="Email" />
+                <input type="password" id="reg-password" placeholder="Password" />
+                <input type="text" id="reg-fullname" placeholder="Full Name" />
+                <select id="reg-role">
+                    <option value="student">Student</option>
+                    <option value="company">Company</option>
+                </select>
+                <div id="student-fields">
+                    <input type="text" id="reg-student-id" placeholder="Student ID" />
+                </div>
+                <button onclick="handleRegister()">Register</button>
+            </div>
+
+            <p id="error-msg" class="error"></p>
+        </div>
+    </div>
+
+    <script type="module" src="../js/auth.js"></script>
+</body>
+</html>

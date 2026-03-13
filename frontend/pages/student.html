@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudentTrack — Student Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #1a1a1a; }
+
+        .navbar {
+            background: white; padding: 0 2rem; height: 60px;
+            display: flex; align-items: center; justify-content: space-between;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 100;
+        }
+        .navbar-brand { font-size: 1.2rem; font-weight: 700; color: #2563eb; }
+        .navbar-right { display: flex; align-items: center; gap: 1rem; }
+        .navbar-right span { font-size: 0.875rem; color: #64748b; }
+        .btn-logout {
+            padding: 0.4rem 1rem; background: #fee2e2; color: #ef4444;
+            border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+        }
+        .btn-logout:hover { background: #fecaca; }
+
+        .tab-bar { background: white; padding: 0 2rem; display: flex; border-bottom: 1px solid #e2e8f0; }
+        .tab-btn {
+            padding: 1rem 1.5rem; border: none; background: none; font-size: 0.875rem;
+            font-weight: 500; color: #64748b; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;
+        }
+        .tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; }
+        .tab-btn:hover { color: #2563eb; }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+        .page { display: none; }
+        .page.active { display: block; }
+
+        .search-bar { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; }
+        .search-bar input, .search-bar select {
+            padding: 0.6rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px;
+            font-size: 0.875rem; outline: none; background: white;
+        }
+        .search-bar input { flex: 1; }
+        .search-bar input:focus, .search-bar select:focus { border-color: #2563eb; }
+
+        .job-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
+        .job-card {
+            background: white; border-radius: 10px; padding: 1.25rem;
+            border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s;
+        }
+        .job-card:hover { border-color: #2563eb; box-shadow: 0 4px 12px rgba(37,99,235,0.1); transform: translateY(-2px); }
+        .job-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; }
+        .job-title { font-size: 1rem; font-weight: 600; }
+        .job-type-badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 20px; font-weight: 600; text-transform: uppercase; }
+        .badge-internship { background: #dbeafe; color: #2563eb; }
+        .badge-full_time { background: #dcfce7; color: #16a34a; }
+        .badge-part_time { background: #fef9c3; color: #ca8a04; }
+        .job-company { font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; }
+        .job-location { font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.75rem; }
+        .job-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; border-top: 1px solid #f1f5f9; }
+        .job-salary { font-size: 0.8rem; color: #16a34a; font-weight: 600; }
+        .job-deadline { font-size: 0.75rem; color: #94a3b8; }
+
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+            z-index: 200; align-items: center; justify-content: center;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: white; border-radius: 12px; width: 600px;
+            max-height: 85vh; overflow-y: auto; padding: 2rem; position: relative;
+        }
+        .modal-close {
+            position: absolute; top: 1rem; right: 1rem; background: none;
+            border: none; font-size: 1.25rem; cursor: pointer; color: #64748b; width: auto; padding: 0.25rem 0.5rem;
+        }
+        .modal h2 { font-size: 1.3rem; margin-bottom: 0.5rem; }
+        .modal-meta { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+        .meta-tag { font-size: 0.78rem; padding: 4px 10px; background: #f1f5f9; border-radius: 20px; color: #475569; }
+        .modal-section { margin-bottom: 1.25rem; }
+        .modal-section h4 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 0.5rem; }
+        .modal-section p { font-size: 0.875rem; color: #475569; line-height: 1.7; }
+        .apply-form { margin-top: 1.5rem; border-top: 1px solid #e2e8f0; padding-top: 1.5rem; }
+        .apply-form h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; }
+
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-size: 0.8rem; font-weight: 500; color: #475569; margin-bottom: 0.4rem; }
+        .form-group textarea, .form-group input {
+            width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #e2e8f0;
+            border-radius: 6px; font-size: 0.875rem; font-family: inherit; outline: none; resize: vertical;
+        }
+        .form-group textarea:focus, .form-group input:focus { border-color: #2563eb; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+        .btn-primary {
+            padding: 0.6rem 1.5rem; background: #2563eb; color: white; border: none;
+            border-radius: 8px; font-size: 0.875rem; font-weight: 600; cursor: pointer; width: auto;
+        }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-withdraw {
+            padding: 0.4rem 0.9rem; background: #fee2e2; color: #ef4444; border: none;
+            border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer;
+        }
+        .btn-withdraw:hover { background: #fecaca; }
+
+        .application-list { display: flex; flex-direction: column; gap: 0.75rem; }
+        .application-card { background: white; border-radius: 10px; padding: 1.25rem; border: 1px solid #e2e8f0; }
+        .app-card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+        .app-title { font-size: 0.95rem; font-weight: 600; }
+        .app-sub { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+        .app-date { font-size: 0.75rem; color: #94a3b8; margin-top: 4px; }
+        .app-card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
+        .app-cover { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #f1f5f9; font-size: 0.8rem; color: #64748b; line-height: 1.6; }
+
+        .status-badge { font-size: 0.75rem; padding: 4px 12px; border-radius: 20px; font-weight: 600; text-transform: capitalize; }
+        .status-pending { background: #fef9c3; color: #ca8a04; }
+        .status-reviewing { background: #dbeafe; color: #2563eb; }
+        .status-interview { background: #f3e8ff; color: #9333ea; }
+        .status-accepted { background: #dcfce7; color: #16a34a; }
+        .status-rejected { background: #fee2e2; color: #ef4444; }
+        .status-withdrawn { background: #f1f5f9; color: #64748b; }
+
+        .profile-card { background: white; border-radius: 10px; padding: 1.5rem; border: 1px solid #e2e8f0; }
+        .profile-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .profile-header h3 { font-size: 1.1rem; font-weight: 700; }
+
+        .empty-state { text-align: center; padding: 3rem; color: #94a3b8; }
+        .empty-state p { font-size: 0.875rem; margin-top: 0.5rem; }
+        .loading { text-align: center; padding: 2rem; color: #94a3b8; font-size: 0.875rem; }
+
+        .msg { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 1rem; }
+        .msg.error { background: #fee2e2; color: #ef4444; }
+        .msg.success { background: #dcfce7; color: #16a34a; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="navbar-brand">StudentTrack</div>
+    <div class="navbar-right">
+        <span id="user-name">Student</span>
+        <button class="btn-logout" id="btn-logout">Logout</button>
+    </div>
+</nav>
+
+<div class="tab-bar">
+    <button class="tab-btn active" id="tab-jobs">Browse Jobs</button>
+    <button class="tab-btn" id="tab-applications">My Applications</button>
+    <button class="tab-btn" id="tab-profile">My Profile</button>
+</div>
+
+<div class="container">
+
+    <!-- JOBS -->
+    <div id="page-jobs" class="page active">
+        <div class="search-bar">
+            <input type="text" id="search-input" placeholder="Search jobs by title or location..." />
+            <select id="filter-type">
+                <option value="">All Types</option>
+                <option value="internship">Internship</option>
+                <option value="full_time">Full Time</option>
+                <option value="part_time">Part Time</option>
+            </select>
+        </div>
+        <div id="jobs-container" class="job-grid">
+            <div class="loading">Loading jobs...</div>
+        </div>
+    </div>
+
+    <!-- APPLICATIONS -->
+    <div id="page-applications" class="page">
+        <div id="msg-applications"></div>
+        <div id="applications-container" class="application-list">
+            <div class="loading">Loading...</div>
+        </div>
+    </div>
+
+    <!-- PROFILE -->
+    <div id="page-profile" class="page">
+        <div class="profile-card">
+            <div class="profile-header">
+                <h3>My Profile</h3>
+                <button class="btn-primary" id="btn-save-profile">Save Changes</button>
+            </div>
+            <div id="msg-profile"></div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input type="text" id="profile-fullname" placeholder="Your full name" />
+                </div>
+                <div class="form-group">
+                    <label>Student ID</label>
+                    <input type="text" id="profile-student-id" placeholder="e.g. SE123456" />
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Major</label>
+                    <input type="text" id="profile-major" placeholder="e.g. Software Engineering" />
+                </div>
+                <div class="form-group">
+                    <label>GPA</label>
+                    <input type="number" id="profile-gpa" placeholder="e.g. 3.5" step="0.1" min="0" max="4" />
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="text" id="profile-phone" placeholder="+84..." />
+                </div>
+                <div class="form-group">
+                    <label>Graduation Year</label>
+                    <input type="number" id="profile-grad-year" placeholder="e.g. 2025" />
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Resume URL</label>
+                <input type="text" id="profile-resume" placeholder="https://your-resume-link.com" />
+            </div>
+            <div class="form-group">
+                <label>Bio</label>
+                <textarea id="profile-bio" rows="3" placeholder="Tell companies about yourself..."></textarea>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- JOB MODAL -->
+<div class="modal-overlay" id="job-modal">
+    <div class="modal">
+        <button class="modal-close" id="modal-close-btn">✕</button>
+        <div id="modal-content"></div>
+    </div>
+</div>
+
+<script type="module">
+    import { api, setToken } from '../js/api.js';
+
+    const token = sessionStorage.getItem('access_token');
+    if (!token) { window.location.href = 'index.html'; }
+    else { setToken(token); }
+
+    let allJobs = [];
+
+    // ── Tabs ───────────────────────────────────────────
+    document.getElementById('tab-jobs').addEventListener('click', function() { switchTab('jobs', this); });
+    document.getElementById('tab-applications').addEventListener('click', function() {
+        switchTab('applications', this); loadApplications();
+    });
+    document.getElementById('tab-profile').addEventListener('click', function() {
+        switchTab('profile', this); loadProfile();
+    });
+
+    function switchTab(tab, el) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`page-${tab}`).classList.add('active');
+        el.classList.add('active');
+    }
+
+    document.getElementById('btn-logout').addEventListener('click', () => {
+        sessionStorage.removeItem('access_token');
+        window.location.href = 'index.html';
+    });
+
+    // ── Jobs ───────────────────────────────────────────
+    async function loadJobs() {
+        try {
+            allJobs = await api.get('/jobs/');
+            renderJobs(allJobs);
+        } catch {
+            document.getElementById('jobs-container').innerHTML = `<div class="empty-state">❌ Failed to load jobs</div>`;
+        }
+    }
+
+    function renderJobs(jobs) {
+        const c = document.getElementById('jobs-container');
+        if (!jobs.length) {
+            c.innerHTML = `<div class="empty-state"><div style="font-size:2rem">📭</div><p>No jobs available</p></div>`;
+            return;
+        }
+        c.innerHTML = jobs.map(job => `
+            <div class="job-card" data-id="${job.id}">
+                <div class="job-card-header">
+                    <div class="job-title">${job.title}</div>
+                    <span class="job-type-badge badge-${job.job_type}">${job.job_type.replace('_',' ')}</span>
+                </div>
+                <div class="job-company">🏢 Company #${job.company_id}</div>
+                <div class="job-location">📍 ${job.location || 'Location not specified'}</div>
+                <div class="job-footer">
+                    <span class="job-salary">${job.salary_min && job.salary_max ? `$${job.salary_min} – $${job.salary_max}` : 'Salary not specified'}</span>
+                    <span class="job-deadline">${job.deadline ? `Due ${new Date(job.deadline).toLocaleDateString()}` : 'No deadline'}</span>
+                </div>
+            </div>
+        `).join('');
+        document.querySelectorAll('.job-card').forEach(card => {
+            card.addEventListener('click', () => openJob(parseInt(card.dataset.id)));
+        });
+    }
+
+    document.getElementById('search-input').addEventListener('input', filterJobs);
+    document.getElementById('filter-type').addEventListener('change', filterJobs);
+
+    function filterJobs() {
+        const s = document.getElementById('search-input').value.toLowerCase();
+        const t = document.getElementById('filter-type').value;
+        renderJobs(allJobs.filter(j =>
+            (j.title.toLowerCase().includes(s) || (j.location||'').toLowerCase().includes(s)) &&
+            (!t || j.job_type === t)
+        ));
+    }
+
+    // ── Job Modal ──────────────────────────────────────
+    async function openJob(jobId) {
+        try {
+            const job = await api.get(`/jobs/${jobId}`);
+            document.getElementById('modal-content').innerHTML = `
+                <h2>${job.title}</h2>
+                <div class="modal-meta">
+                    <span class="meta-tag">📍 ${job.location || 'N/A'}</span>
+                    <span class="meta-tag">💼 ${job.job_type.replace('_',' ')}</span>
+                    ${job.salary_min ? `<span class="meta-tag">💰 $${job.salary_min} – $${job.salary_max}</span>` : ''}
+                    ${job.deadline ? `<span class="meta-tag">📅 Due ${new Date(job.deadline).toLocaleDateString()}</span>` : ''}
+                </div>
+                ${job.description ? `<div class="modal-section"><h4>Description</h4><p>${job.description}</p></div>` : ''}
+                ${job.requirements ? `<div class="modal-section"><h4>Requirements</h4><p>${job.requirements}</p></div>` : ''}
+                <div class="apply-form">
+                    <h4>Apply for this position</h4>
+                    <div id="apply-msg"></div>
+                    <div class="form-group">
+                        <label>Cover Letter</label>
+                        <textarea id="cover-letter" rows="4" placeholder="Tell them why you're a great fit..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Resume URL (optional)</label>
+                        <input type="text" id="resume-url" placeholder="https://..." />
+                    </div>
+                    <button class="btn-primary" id="btn-apply">Submit Application</button>
+                </div>
+            `;
+            document.getElementById('btn-apply').addEventListener('click', () => applyJob(job.id));
+            document.getElementById('job-modal').classList.add('show');
+        } catch { alert('Failed to load job'); }
+    }
+
+    document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+    document.getElementById('job-modal').addEventListener('click', function(e) { if (e.target===this) closeModal(); });
+    function closeModal() { document.getElementById('job-modal').classList.remove('show'); }
+
+    async function applyJob(jobId) {
+        const msgEl = document.getElementById('apply-msg');
+        try {
+            await api.post('/applications/', {
+                job_id: jobId,
+                cover_letter: document.getElementById('cover-letter').value || null,
+                resume_url: document.getElementById('resume-url').value || null
+            });
+            msgEl.innerHTML = `<div class="msg success">✅ Application submitted!</div>`;
+            setTimeout(closeModal, 1500);
+        } catch(err) {
+            msgEl.innerHTML = `<div class="msg error">❌ ${err.message}</div>`;
+        }
+    }
+
+    // ── Applications ───────────────────────────────────
+    async function loadApplications() {
+        const c = document.getElementById('applications-container');
+        c.innerHTML = `<div class="loading">Loading...</div>`;
+        try {
+            const apps = await api.get('/applications/my');
+            if (!apps.length) {
+                c.innerHTML = `<div class="empty-state"><div style="font-size:2rem">📋</div><p>No applications yet</p></div>`;
+                return;
+            }
+
+            // fetch job titles
+            const jobIds = [...new Set(apps.map(a => a.job_id))];
+            const jobMap = {};
+            await Promise.all(jobIds.map(async id => {
+                try { const j = await api.get(`/jobs/${id}`); jobMap[id] = j.title; }
+                catch { jobMap[id] = `Job #${id}`; }
+            }));
+
+            c.innerHTML = apps.map(app => `
+                <div class="application-card">
+                    <div class="app-card-top">
+                        <div>
+                            <div class="app-title">${jobMap[app.job_id]}</div>
+                            <div class="app-sub">Application #${app.id}</div>
+                            <div class="app-date">Applied ${new Date(app.applied_at).toLocaleDateString()}</div>
+                        </div>
+                        <div class="app-card-right">
+                            <span class="status-badge status-${app.status}">${app.status}</span>
+                            ${!['withdrawn','accepted','rejected'].includes(app.status)
+                                ? `<button class="btn-withdraw" data-id="${app.id}">Withdraw</button>` : ''}
+                        </div>
+                    </div>
+                    ${app.cover_letter ? `<div class="app-cover">📝 <strong>Cover Letter:</strong> ${app.cover_letter}</div>` : ''}
+                </div>
+            `).join('');
+
+            document.querySelectorAll('.btn-withdraw').forEach(btn => {
+                btn.addEventListener('click', () => withdrawApp(parseInt(btn.dataset.id)));
+            });
+        } catch {
+            c.innerHTML = `<div class="empty-state">❌ Failed to load</div>`;
+        }
+    }
+
+    async function withdrawApp(appId) {
+        if (!confirm('Withdraw this application?')) return;
+        try {
+            await api.put(`/applications/${appId}/status`, { status: 'withdrawn' });
+            showMsg('applications', '✅ Application withdrawn', 'success');
+            loadApplications();
+        } catch(err) { showMsg('applications', `❌ ${err.message}`, 'error'); }
+    }
+
+    // ── Profile ────────────────────────────────────────
+    async function loadProfile() {
+        try {
+            const p = await api.get('/students/profile');
+            document.getElementById('profile-fullname').value = p.full_name || '';
+            document.getElementById('profile-student-id').value = p.student_id || '';
+            document.getElementById('profile-major').value = p.major || '';
+            document.getElementById('profile-gpa').value = p.gpa || '';
+            document.getElementById('profile-phone').value = p.phone || '';
+            document.getElementById('profile-grad-year').value = p.graduation_year || '';
+            document.getElementById('profile-resume').value = p.resume_url || '';
+            document.getElementById('profile-bio').value = p.bio || '';
+            if (p.full_name) document.getElementById('user-name').textContent = p.full_name;
+        } catch { showMsg('profile', '❌ Failed to load profile', 'error'); }
+    }
+
+    document.getElementById('btn-save-profile').addEventListener('click', async () => {
+        const body = {
+            full_name: document.getElementById('profile-fullname').value || null,
+            student_id: document.getElementById('profile-student-id').value || null,
+            major: document.getElementById('profile-major').value || null,
+            gpa: document.getElementById('profile-gpa').value ? parseFloat(document.getElementById('profile-gpa').value) : null,
+            phone: document.getElementById('profile-phone').value || null,
+            graduation_year: document.getElementById('profile-grad-year').value ? parseInt(document.getElementById('profile-grad-year').value) : null,
+            resume_url: document.getElementById('profile-resume').value || null,
+            bio: document.getElementById('profile-bio').value || null,
+        };
+        try {
+            await api.put('/students/profile', body);
+            showMsg('profile', '✅ Profile saved!', 'success');
+            if (body.full_name) document.getElementById('user-name').textContent = body.full_name;
+        } catch(err) { showMsg('profile', `❌ ${err.message}`, 'error'); }
+    });
+
+    function showMsg(page, text, type) {
+        const el = document.getElementById(`msg-${page}`);
+        el.innerHTML = `<div class="msg ${type}">${text}</div>`;
+        setTimeout(() => el.innerHTML = '', 3000);
+    }
+
+    loadJobs();
+    loadProfile();
+</script>
+</body>
+</html>

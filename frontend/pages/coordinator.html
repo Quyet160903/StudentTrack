@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudentTrack — Coordinator Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #1a1a1a; }
+
+        .navbar { background: white; padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 100; }
+        .navbar-brand { font-size: 1.2rem; font-weight: 700; color: #2563eb; }
+        .navbar-right { display: flex; align-items: center; gap: 1rem; }
+        .admin-badge { font-size: 0.72rem; padding: 3px 10px; background: #dbeafe; color: #2563eb; border-radius: 20px; font-weight: 600; }
+        .btn-logout { padding: 0.4rem 1rem; background: #fee2e2; color: #ef4444; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+        .btn-logout:hover { background: #fecaca; }
+
+        .tab-bar { background: white; padding: 0 2rem; display: flex; border-bottom: 1px solid #e2e8f0; overflow-x: auto; }
+        .tab-btn { padding: 1rem 1.5rem; border: none; background: none; font-size: 0.875rem; font-weight: 500; color: #64748b; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; }
+        .tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; }
+        .tab-btn:hover { color: #2563eb; }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        .page { display: none; }
+        .page.active { display: block; }
+
+        /* STATS */
+        .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: white; border-radius: 10px; padding: 1.25rem; border: 1px solid #e2e8f0; text-align: center; }
+        .stat-number { font-size: 2rem; font-weight: 700; color: #2563eb; }
+        .stat-label { font-size: 0.8rem; color: #64748b; margin-top: 0.25rem; }
+        .stat-pending .stat-number { color: #ca8a04; }
+
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .page-header h2 { font-size: 1.2rem; font-weight: 700; }
+
+        .search-bar { display: flex; gap: 0.75rem; margin-bottom: 1.25rem; }
+        .search-bar input, .search-bar select { padding: 0.6rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.875rem; outline: none; background: white; }
+        .search-bar input { flex: 1; }
+        .search-bar input:focus, .search-bar select:focus { border-color: #2563eb; }
+
+        .table-wrapper { background: white; border-radius: 10px; border: 1px solid #e2e8f0; overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th { text-align: left; padding: 12px 16px; background: #f8fafc; color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0; }
+        td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; color: #475569; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #f8fafc; }
+
+        /* BADGES */
+        .status-badge { font-size: 0.72rem; padding: 3px 10px; border-radius: 20px; font-weight: 600; text-transform: capitalize; }
+        .badge-open      { background: #dcfce7; color: #16a34a; }
+        .badge-draft     { background: #f1f5f9; color: #64748b; }
+        .badge-closed    { background: #fee2e2; color: #ef4444; }
+        .badge-pending   { background: #fef9c3; color: #ca8a04; }
+        .badge-approved  { background: #dcfce7; color: #16a34a; }
+        .badge-rejected  { background: #fee2e2; color: #ef4444; }
+        .badge-reviewing { background: #dbeafe; color: #2563eb; }
+        .badge-interview { background: #f3e8ff; color: #9333ea; }
+        .badge-accepted  { background: #dcfce7; color: #16a34a; }
+        .badge-withdrawn { background: #f1f5f9; color: #64748b; }
+        .badge-internship { background: #dbeafe; color: #2563eb; }
+        .badge-full_time  { background: #dcfce7; color: #16a34a; }
+        .badge-part_time  { background: #fef9c3; color: #ca8a04; }
+
+        /* ACTION BUTTONS */
+        .btn-approve { padding: 0.3rem 0.7rem; background: #dcfce7; color: #16a34a; border: none; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+        .btn-approve:hover { background: #bbf7d0; }
+        .btn-reject  { padding: 0.3rem 0.7rem; background: #fee2e2; color: #ef4444; border: none; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+        .btn-reject:hover { background: #fecaca; }
+        .btn-view    { padding: 0.3rem 0.7rem; background: #dbeafe; color: #2563eb; border: none; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+        .btn-view:hover { background: #bfdbfe; }
+
+        select.status-select { padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.78rem; outline: none; cursor: pointer; }
+
+        .empty-state { text-align: center; padding: 3rem; color: #94a3b8; font-size: 0.875rem; }
+        .loading { text-align: center; padding: 2rem; color: #94a3b8; font-size: 0.875rem; }
+
+        .msg { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 1rem; }
+        .msg.error   { background: #fee2e2; color: #ef4444; }
+        .msg.success { background: #dcfce7; color: #16a34a; }
+
+        .title-link { color: #2563eb; cursor: pointer; font-weight: 600; }
+        .title-link:hover { text-decoration: underline; }
+
+        /* MODAL */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: center; justify-content: center; }
+        .modal-overlay.show { display: flex; }
+        .modal { background: white; border-radius: 14px; width: 620px; max-height: 88vh; overflow-y: auto; position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+        .modal-header { padding: 1.5rem 2rem 1.25rem; border-bottom: 1px solid #f1f5f9; position: sticky; top: 0; background: white; z-index: 1; border-radius: 14px 14px 0 0; }
+        .modal-header h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.5rem; padding-right: 2.5rem; }
+        .modal-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .modal-close { position: absolute; top: 1.25rem; right: 1.25rem; background: #f1f5f9; border: none; width: 28px; height: 28px; border-radius: 50%; font-size: 1rem; cursor: pointer; color: #64748b; display: flex; align-items: center; justify-content: center; }
+        .modal-close:hover { background: #e2e8f0; }
+        .modal-body { padding: 1.5rem 2rem; }
+        .modal-footer { padding: 1.25rem 2rem; border-top: 1px solid #f1f5f9; display: flex; gap: 0.75rem; justify-content: flex-end; background: #f8fafc; border-radius: 0 0 14px 14px; }
+
+        .detail-section { margin-bottom: 1.25rem; }
+        .detail-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; font-weight: 600; margin-bottom: 0.4rem; }
+        .detail-section p { font-size: 0.875rem; color: #475569; line-height: 1.7; }
+        .detail-tag { font-size: 0.78rem; padding: 4px 10px; background: #f1f5f9; border-radius: 20px; color: #475569; }
+        .salary-text { font-size: 1rem; font-weight: 700; color: #16a34a; }
+
+        .btn-approve-lg { padding: 0.6rem 1.5rem; background: #16a34a; color: white; border: none; border-radius: 8px; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+        .btn-approve-lg:hover { background: #15803d; }
+        .btn-reject-lg  { padding: 0.6rem 1.5rem; background: #fee2e2; color: #ef4444; border: none; border-radius: 8px; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+        .btn-reject-lg:hover { background: #fecaca; }
+        .btn-cancel-lg  { padding: 0.6rem 1.25rem; background: #f1f5f9; color: #475569; border: none; border-radius: 8px; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+        .btn-cancel-lg:hover { background: #e2e8f0; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="navbar-brand">StudentTrack</div>
+    <div class="navbar-right">
+        <span class="admin-badge">Coordinator</span>
+        <button class="btn-logout" id="btn-logout">Logout</button>
+    </div>
+</nav>
+
+<div class="tab-bar">
+    <button class="tab-btn active" id="tab-overview">Overview</button>
+    <button class="tab-btn" id="tab-pending">Pending Jobs</button>
+    <button class="tab-btn" id="tab-students">Students</button>
+    <button class="tab-btn" id="tab-companies">Companies</button>
+    <button class="tab-btn" id="tab-jobs">All Jobs</button>
+    <button class="tab-btn" id="tab-applications">All Applications</button>
+</div>
+
+<div class="container">
+
+    <!-- OVERVIEW -->
+    <div id="page-overview" class="page active">
+        <div class="stats-grid">
+            <div class="stat-card"><div class="stat-number" id="stat-students">—</div><div class="stat-label">Total Students</div></div>
+            <div class="stat-card"><div class="stat-number" id="stat-companies">—</div><div class="stat-label">Total Companies</div></div>
+            <div class="stat-card stat-pending"><div class="stat-number" id="stat-pending">—</div><div class="stat-label">Pending Approval</div></div>
+            <div class="stat-card"><div class="stat-number" id="stat-applications">—</div><div class="stat-label">Total Applications</div></div>
+            <div class="stat-card"><div class="stat-number" id="stat-accepted">—</div><div class="stat-label">Accepted</div></div>
+        </div>
+        <div style="background:white; border-radius:10px; padding:1.5rem; border:1px solid #e2e8f0;">
+            <h3 style="font-size:1rem; font-weight:700; margin-bottom:1rem">Recent Applications</h3>
+            <div id="recent-applications"><div class="loading">Loading...</div></div>
+        </div>
+    </div>
+
+    <!-- PENDING JOBS -->
+    <div id="page-pending" class="page">
+        <div class="page-header"><h2>Pending Job Approvals</h2></div>
+        <div id="msg-pending"></div>
+        <div class="table-wrapper">
+            <div id="pending-jobs-container"><div class="loading">Loading...</div></div>
+        </div>
+    </div>
+
+    <!-- STUDENTS -->
+    <div id="page-students" class="page">
+        <div class="page-header"><h2>All Students</h2></div>
+        <div class="search-bar">
+            <input type="text" id="search-students" placeholder="Search by name, major, student ID..." />
+        </div>
+        <div id="msg-students"></div>
+        <div class="table-wrapper"><div id="students-container"><div class="loading">Loading...</div></div></div>
+    </div>
+
+    <!-- COMPANIES -->
+    <div id="page-companies" class="page">
+        <div class="page-header"><h2>All Companies</h2></div>
+        <div class="search-bar">
+            <input type="text" id="search-companies" placeholder="Search by name or location..." />
+        </div>
+        <div class="table-wrapper"><div id="companies-container"><div class="loading">Loading...</div></div></div>
+    </div>
+
+    <!-- ALL JOBS -->
+    <div id="page-jobs" class="page">
+        <div class="page-header"><h2>All Job Postings</h2></div>
+        <div class="search-bar">
+            <input type="text" id="search-jobs" placeholder="Search by title..." />
+            <select id="filter-job-status">
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="open">Open</option>
+                <option value="closed">Closed</option>
+                <option value="draft">Draft</option>
+            </select>
+        </div>
+        <div class="table-wrapper"><div id="jobs-container"><div class="loading">Loading...</div></div></div>
+    </div>
+
+    <!-- ALL APPLICATIONS -->
+    <div id="page-applications" class="page">
+        <div class="page-header"><h2>All Applications</h2></div>
+        <div class="search-bar">
+            <select id="filter-app-status">
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="reviewing">Reviewing</option>
+                <option value="interview">Interview</option>
+                <option value="accepted">Accepted</option>
+                <option value="rejected">Rejected</option>
+                <option value="withdrawn">Withdrawn</option>
+            </select>
+        </div>
+        <div id="msg-applications"></div>
+        <div class="table-wrapper"><div id="applications-container"><div class="loading">Loading...</div></div></div>
+    </div>
+
+</div>
+
+<!-- JOB DETAIL MODAL -->
+<div class="modal-overlay" id="job-detail-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="modal-job-title">Job Title</h3>
+            <div class="modal-tags" id="modal-job-tags"></div>
+            <button class="modal-close" id="modal-close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="detail-section" id="modal-salary-section">
+                <div class="detail-label">Salary Range</div>
+                <div class="salary-text" id="modal-job-salary"></div>
+            </div>
+            <div class="detail-section" id="modal-deadline-section">
+                <div class="detail-label">Application Deadline</div>
+                <p id="modal-job-deadline"></p>
+            </div>
+            <div class="detail-section" id="modal-desc-section">
+                <div class="detail-label">Description</div>
+                <p id="modal-job-description"></p>
+            </div>
+            <div class="detail-section" id="modal-req-section">
+                <div class="detail-label">Requirements</div>
+                <p id="modal-job-requirements"></p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-cancel-lg" id="modal-btn-cancel">Close</button>
+            <button class="btn-reject-lg"  id="modal-btn-reject"  style="display:none">❌ Reject</button>
+            <button class="btn-approve-lg" id="modal-btn-approve" style="display:none">✅ Approve</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { api, setToken } from '../js/api.js';
+
+    const token = sessionStorage.getItem('access_token');
+    if (!token) { window.location.href = 'index.html'; }
+    else { setToken(token); }
+
+    let allStudents = [], allCompanies = [], allJobs = [], allApplications = [], pendingJobs = [];
+    let currentModalJobId = null;
+
+    // ── Tabs ───────────────────────────────────────────
+    const tabMap = {
+        'tab-overview':     { page: 'overview',      load: loadOverview },
+        'tab-pending':      { page: 'pending',        load: loadPendingJobs },
+        'tab-students':     { page: 'students',       load: loadStudents },
+        'tab-companies':    { page: 'companies',      load: loadCompanies },
+        'tab-jobs':         { page: 'jobs',           load: loadJobs },
+        'tab-applications': { page: 'applications',   load: loadApplications },
+    };
+
+    Object.keys(tabMap).forEach(tabId => {
+        document.getElementById(tabId).addEventListener('click', function() {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`page-${tabMap[tabId].page}`).classList.add('active');
+            this.classList.add('active');
+            tabMap[tabId].load();
+        });
+    });
+
+    document.getElementById('btn-logout').addEventListener('click', () => {
+        sessionStorage.removeItem('access_token');
+        window.location.href = 'index.html';
+    });
+
+    // ── Overview ───────────────────────────────────────
+    async function loadOverview() {
+        try {
+            const [s, c, j, a] = await Promise.allSettled([
+                api.get('/students/'),
+                api.get('/companies/'),
+                api.get('/jobs/all'),
+                api.get('/applications/all')
+            ]);
+
+            allStudents     = s.status === 'fulfilled' ? s.value : [];
+            allCompanies    = c.status === 'fulfilled' ? c.value : [];
+            allJobs         = j.status === 'fulfilled' ? j.value : [];
+            allApplications = a.status === 'fulfilled' ? a.value : [];
+
+            document.getElementById('stat-students').textContent     = allStudents.length;
+            document.getElementById('stat-companies').textContent    = allCompanies.length;
+            document.getElementById('stat-pending').textContent      = allJobs.filter(j => j.status === 'pending').length;
+            document.getElementById('stat-applications').textContent = allApplications.length;
+            document.getElementById('stat-accepted').textContent     = allApplications.filter(a => a.status === 'accepted').length;
+
+            const recent = allApplications.slice(-5).reverse();
+            document.getElementById('recent-applications').innerHTML = !recent.length
+                ? `<div class="empty-state">No applications yet</div>`
+                : `<table>
+                    <thead><tr><th>App ID</th><th>Job ID</th><th>Student ID</th><th>Status</th><th>Applied</th></tr></thead>
+                    <tbody>${recent.map(app => `<tr>
+                        <td>#${app.id}</td>
+                        <td>Job #${app.job_id}</td>
+                        <td>Student #${app.student_id}</td>
+                        <td><span class="status-badge badge-${app.status}">${app.status}</span></td>
+                        <td>${new Date(app.applied_at).toLocaleDateString()}</td>
+                    </tr>`).join('')}</tbody>
+                </table>`;
+        } catch(err) { console.error('Overview error:', err); }
+    }
+
+    // ── Pending Jobs ───────────────────────────────────
+    async function loadPendingJobs() {
+        try {
+            pendingJobs = await api.get('/jobs/pending');
+            renderPendingJobs(pendingJobs);
+        } catch {
+            document.getElementById('pending-jobs-container').innerHTML =
+                `<div class="empty-state">❌ Failed to load pending jobs</div>`;
+        }
+    }
+
+    function renderPendingJobs(jobs) {
+        const c = document.getElementById('pending-jobs-container');
+        if (!jobs.length) {
+            c.innerHTML = `<div class="empty-state">✅ No pending jobs — all caught up!</div>`;
+            return;
+        }
+        c.innerHTML = `
+            <table>
+                <thead><tr>
+                    <th>ID</th><th>Title</th><th>Type</th><th>Location</th>
+                    <th>Company ID</th><th>Salary</th><th>Deadline</th><th>Actions</th>
+                </tr></thead>
+                <tbody>${jobs.map(job => `<tr>
+                    <td>#${job.id}</td>
+                    <td><span class="title-link" data-view="${job.id}">${job.title}</span></td>
+                    <td><span class="status-badge badge-${job.job_type}">${job.job_type.replace('_',' ')}</span></td>
+                    <td>${job.location || '—'}</td>
+                    <td>Company #${job.company_id}</td>
+                    <td style="font-size:0.78rem; color:#16a34a; font-weight:600">
+                        ${job.salary_min && job.salary_max
+                            ? `${Number(job.salary_min).toLocaleString()} – ${Number(job.salary_max).toLocaleString()}`
+                            : '—'}
+                    </td>
+                    <td>${job.deadline ? new Date(job.deadline).toLocaleDateString() : '—'}</td>
+                    <td style="display:flex; gap:0.4rem; flex-wrap:wrap">
+                        <button class="btn-view"    data-view="${job.id}">🔍 Detail</button>
+                        <button class="btn-approve" data-approve="${job.id}">✅ Approve</button>
+                        <button class="btn-reject"  data-reject="${job.id}">❌ Reject</button>
+                    </td>
+                </tr>`).join('')}</tbody>
+            </table>`;
+
+        c.querySelectorAll('[data-view]').forEach(el =>
+            el.addEventListener('click', () => openJobDetail(parseInt(el.dataset.view))));
+        c.querySelectorAll('[data-approve]').forEach(btn =>
+            btn.addEventListener('click', () => approveJob(parseInt(btn.dataset.approve))));
+        c.querySelectorAll('[data-reject]').forEach(btn =>
+            btn.addEventListener('click', () => rejectJob(parseInt(btn.dataset.reject))));
+    }
+
+    // ── Job Detail Modal ───────────────────────────────
+    async function openJobDetail(jobId) {
+        currentModalJobId = jobId;
+        try {
+            const job = await api.get(`/jobs/${jobId}`);
+
+            document.getElementById('modal-job-title').textContent = job.title;
+            document.getElementById('modal-job-tags').innerHTML = `
+                <span class="status-badge badge-${job.job_type}">${job.job_type.replace('_',' ')}</span>
+                <span class="status-badge badge-${job.status}">${job.status}</span>
+                ${job.location ? `<span class="detail-tag">📍 ${job.location}</span>` : ''}
+                <span class="detail-tag">Company #${job.company_id}</span>
+            `;
+
+            const salarySection = document.getElementById('modal-salary-section');
+            if (job.salary_min && job.salary_max) {
+                document.getElementById('modal-job-salary').textContent =
+                    `${Number(job.salary_min).toLocaleString()} – ${Number(job.salary_max).toLocaleString()} VND`;
+                salarySection.style.display = 'block';
+            } else { salarySection.style.display = 'none'; }
+
+            const deadlineSection = document.getElementById('modal-deadline-section');
+            if (job.deadline) {
+                document.getElementById('modal-job-deadline').textContent =
+                    new Date(job.deadline).toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+                deadlineSection.style.display = 'block';
+            } else { deadlineSection.style.display = 'none'; }
+
+            const descSection = document.getElementById('modal-desc-section');
+            if (job.description) {
+                document.getElementById('modal-job-description').textContent = job.description;
+                descSection.style.display = 'block';
+            } else { descSection.style.display = 'none'; }
+
+            const reqSection = document.getElementById('modal-req-section');
+            if (job.requirements) {
+                document.getElementById('modal-job-requirements').textContent = job.requirements;
+                reqSection.style.display = 'block';
+            } else { reqSection.style.display = 'none'; }
+
+            const isPending = job.status === 'pending';
+            document.getElementById('modal-btn-approve').style.display = isPending ? '' : 'none';
+            document.getElementById('modal-btn-reject').style.display  = isPending ? '' : 'none';
+
+            document.getElementById('job-detail-modal').classList.add('show');
+        } catch { alert('Failed to load job details'); }
+    }
+
+    document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+    document.getElementById('modal-btn-cancel').addEventListener('click', closeModal);
+    document.getElementById('job-detail-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal();
+    });
+    function closeModal() {
+        document.getElementById('job-detail-modal').classList.remove('show');
+        currentModalJobId = null;
+    }
+
+    document.getElementById('modal-btn-approve').addEventListener('click', async () => {
+        if (!currentModalJobId) return;
+        await approveJob(currentModalJobId);
+        closeModal();
+    });
+    document.getElementById('modal-btn-reject').addEventListener('click', async () => {
+        if (!currentModalJobId) return;
+        await rejectJob(currentModalJobId);
+        closeModal();
+    });
+
+    async function approveJob(jobId) {
+        try {
+            await api.put(`/jobs/${jobId}/approve`, {});
+            showMsg('pending', '✅ Job approved!', 'success');
+            loadPendingJobs();
+            loadOverview();
+        } catch(err) { showMsg('pending', `❌ ${err.message}`, 'error'); }
+    }
+
+    async function rejectJob(jobId) {
+        const note = prompt('Reason for rejection (optional):');
+        if (note === null) return;
+        try {
+            await api.put(`/jobs/${jobId}/reject`, { note: note || '' });
+            showMsg('pending', '✅ Job rejected.', 'success');
+            loadPendingJobs();
+            loadOverview();
+        } catch(err) { showMsg('pending', `❌ ${err.message}`, 'error'); }
+    }
+
+    // ── Students ───────────────────────────────────────
+    async function loadStudents() {
+        try {
+            allStudents = await api.get('/students/');
+            renderStudents(allStudents);
+        } catch {
+            document.getElementById('students-container').innerHTML =
+                `<div class="empty-state">❌ Failed to load students</div>`;
+        }
+    }
+
+    function renderStudents(list) {
+        const c = document.getElementById('students-container');
+        if (!list.length) { c.innerHTML = `<div class="empty-state">No students found</div>`; return; }
+        c.innerHTML = `
+            <table>
+                <thead><tr><th>ID</th><th>Full Name</th><th>Student ID</th><th>Major</th><th>GPA</th><th>Grad Year</th></tr></thead>
+                <tbody>${list.map(s => `<tr>
+                    <td>#${s.id}</td>
+                    <td>${s.full_name || '—'}</td>
+                    <td>${s.student_id || '—'}</td>
+                    <td>${s.major || '—'}</td>
+                    <td>${s.gpa ?? '—'}</td>
+                    <td>${s.graduation_year || '—'}</td>
+                </tr>`).join('')}</tbody>
+            </table>`;
+    }
+
+    document.getElementById('search-students').addEventListener('input', function() {
+        const s = this.value.toLowerCase();
+        renderStudents(allStudents.filter(st =>
+            (st.full_name||'').toLowerCase().includes(s) ||
+            (st.major||'').toLowerCase().includes(s) ||
+            (st.student_id||'').toLowerCase().includes(s)
+        ));
+    });
+
+    // ── Companies ──────────────────────────────────────
+    async function loadCompanies() {
+        try {
+            allCompanies = await api.get('/companies/');
+            renderCompanies(allCompanies);
+        } catch {
+            document.getElementById('companies-container').innerHTML =
+                `<div class="empty-state">❌ Failed to load companies</div>`;
+        }
+    }
+
+    function renderCompanies(list) {
+        const c = document.getElementById('companies-container');
+        if (!list.length) { c.innerHTML = `<div class="empty-state">No companies found</div>`; return; }
+        c.innerHTML = `
+            <table>
+                <thead><tr><th>ID</th><th>Name</th><th>Location</th><th>Website</th></tr></thead>
+                <tbody>${list.map(co => `<tr>
+                    <td>#${co.id}</td>
+                    <td>${co.name || '—'}</td>
+                    <td>${co.location || '—'}</td>
+                    <td>${co.website
+                        ? `<a href="${co.website}" target="_blank" style="color:#2563eb; font-size:0.8rem">${co.website}</a>`
+                        : '—'}</td>
+                </tr>`).join('')}</tbody>
+            </table>`;
+    }
+
+    document.getElementById('search-companies').addEventListener('input', function() {
+        const s = this.value.toLowerCase();
+        renderCompanies(allCompanies.filter(c =>
+            (c.name||'').toLowerCase().includes(s) ||
+            (c.location||'').toLowerCase().includes(s)
+        ));
+    });
+
+    // ── All Jobs ───────────────────────────────────────
+    async function loadJobs() {
+        try {
+            allJobs = await api.get('/jobs/all');
+            renderJobs(allJobs);
+        } catch {
+            document.getElementById('jobs-container').innerHTML =
+                `<div class="empty-state">❌ Failed to load jobs</div>`;
+        }
+    }
+
+    function renderJobs(list) {
+        const c = document.getElementById('jobs-container');
+        if (!list.length) { c.innerHTML = `<div class="empty-state">No jobs found</div>`; return; }
+        c.innerHTML = `
+            <table>
+                <thead><tr><th>ID</th><th>Title</th><th>Type</th><th>Location</th><th>Company ID</th><th>Status</th><th>Deadline</th></tr></thead>
+                <tbody>${list.map(job => `<tr>
+                    <td>#${job.id}</td>
+                    <td>${job.title}</td>
+                    <td><span class="status-badge badge-${job.job_type}">${job.job_type.replace('_',' ')}</span></td>
+                    <td>${job.location || '—'}</td>
+                    <td>Company #${job.company_id}</td>
+                    <td><span class="status-badge badge-${job.status}">${job.status}</span></td>
+                    <td>${job.deadline ? new Date(job.deadline).toLocaleDateString() : '—'}</td>
+                </tr>`).join('')}</tbody>
+            </table>`;
+    }
+
+    document.getElementById('search-jobs').addEventListener('input', applyJobFilters);
+    document.getElementById('filter-job-status').addEventListener('change', applyJobFilters);
+
+    function applyJobFilters() {
+        const s = document.getElementById('search-jobs').value.toLowerCase();
+        const st = document.getElementById('filter-job-status').value;
+        renderJobs(allJobs.filter(j =>
+            j.title.toLowerCase().includes(s) && (!st || j.status === st)
+        ));
+    }
+
+    // ── All Applications ───────────────────────────────
+    async function loadApplications() {
+        try {
+            allApplications = await api.get('/applications/all');
+            renderApplications(allApplications);
+        } catch {
+            document.getElementById('applications-container').innerHTML =
+                `<div class="empty-state">❌ Failed to load applications</div>`;
+        }
+    }
+
+    function renderApplications(list) {
+        const c = document.getElementById('applications-container');
+        if (!list.length) { c.innerHTML = `<div class="empty-state">No applications found</div>`; return; }
+        c.innerHTML = `
+            <table>
+                <thead><tr><th>ID</th><th>Student</th><th>Job</th><th>Status</th><th>Applied</th><th>Update</th></tr></thead>
+                <tbody>${list.map(app => `<tr>
+                    <td>#${app.id}</td>
+                    <td>Student #${app.student_id}</td>
+                    <td>Job #${app.job_id}</td>
+                    <td><span class="status-badge badge-${app.status}">${app.status}</span></td>
+                    <td>${new Date(app.applied_at).toLocaleDateString()}</td>
+                    <td>
+                        <select class="status-select" data-app-id="${app.id}">
+                            <option value="pending"   ${app.status==='pending'?'selected':''}>Pending</option>
+                            <option value="reviewing" ${app.status==='reviewing'?'selected':''}>Reviewing</option>
+                            <option value="interview" ${app.status==='interview'?'selected':''}>Interview</option>
+                            <option value="accepted"  ${app.status==='accepted'?'selected':''}>Accepted</option>
+                            <option value="rejected"  ${app.status==='rejected'?'selected':''}>Rejected</option>
+                        </select>
+                    </td>
+                </tr>`).join('')}</tbody>
+            </table>`;
+
+        c.querySelectorAll('.status-select').forEach(sel => {
+            sel.addEventListener('change', () => updateAppStatus(parseInt(sel.dataset.appId), sel.value));
+        });
+    }
+
+    document.getElementById('filter-app-status').addEventListener('change', function() {
+        const st = this.value;
+        renderApplications(!st ? allApplications : allApplications.filter(a => a.status === st));
+    });
+
+    async function updateAppStatus(appId, newStatus) {
+        try {
+            await api.put(`/applications/${appId}/status`, { status: newStatus });
+            showMsg('applications', '✅ Status updated!', 'success');
+            loadApplications();
+            loadOverview();
+        } catch(err) {
+            showMsg('applications', `❌ ${err.message}`, 'error');
+        }
+    }
+
+    function showMsg(page, text, type) {
+        const el = document.getElementById(`msg-${page}`);
+        el.innerHTML = `<div class="msg ${type}">${text}</div>`;
+        setTimeout(() => el.innerHTML = '', 3000);
+    }
+
+    // ── Init ───────────────────────────────────────────
+    loadOverview();
+</script>
+</body>
+</html>
