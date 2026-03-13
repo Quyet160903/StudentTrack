@@ -7,7 +7,9 @@ from app.models.student import Student
 from app.models.company import Company
 from app.models.job_posting import JobPosting, JobStatus
 from app.models.application import Application, ApplicationStatus
+from app.models.application_log import ApplicationStatusLog
 from app.schemas.application import ApplicationCreate, ApplicationUpdate, ApplicationResponse
+from app.schemas.application_log import ApplicationLogResponse
 from app.schemas.pagination import PaginationParams, PaginatedResponse
 
 
@@ -134,7 +136,52 @@ class ApplicationService:
             if job.company_id != company.id:
                 raise HTTPException(status_code=403, detail="Not your job")
 
+        old_status = app.status
         app.status = request.status
         db.commit()
         db.refresh(app)
+
+        # Write status change log
+        log = ApplicationStatusLog(
+            application_id=app.id,
+            old_status=old_status,
+            new_status=request.status,
+            changed_by=current_user.id,
+            note=request.note if hasattr(request, 'note') else None,
+        )
+        db.add(log)
+        db.commit()
+
         return ApplicationResponse.model_validate(app)
+
+    @staticmethod
+    def get_logs(db: Session, app_id: int, current_user: User) -> List[ApplicationLogResponse]:
+        """
+        Return status change history for one application.
+        Accessible by: coordinator, the company that owns the job, the student who applied.
+        """
+        from app.models.user import UserRole
+
+        app = db.query(Application).filter(Application.id == app_id).first()
+        if not app:
+            raise HTTPException(status_code=404, detail="Application not found")
+
+        # Authorization check
+        if current_user.role == UserRole.STUDENT:
+            student = db.query(Student).filter(Student.user_id == current_user.id).first()
+            if not student or app.student_id != student.id:
+                raise HTTPException(status_code=403, detail="Not your application")
+        elif current_user.role == UserRole.COMPANY:
+            company = db.query(Company).filter(Company.user_id == current_user.id).first()
+            job = db.query(JobPosting).filter(JobPosting.id == app.job_id).first()
+            if not company or job.company_id != company.id:
+                raise HTTPException(status_code=403, detail="Not your job")
+        # coordinator can see all
+
+        logs = (
+            db.query(ApplicationStatusLog)
+            .filter(ApplicationStatusLog.application_id == app_id)
+            .order_by(ApplicationStatusLog.changed_at.asc())
+            .all()
+        )
+        return [ApplicationLogResponse.model_validate(log) for log in logs]

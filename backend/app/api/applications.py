@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.schemas.application import ApplicationResponse, ApplicationCreate, ApplicationUpdate
+from app.schemas.application_log import ApplicationLogResponse
 from app.schemas.pagination import PaginationParams, PaginatedResponse
 from app.models.user import User
 from app.core.deps import require_student, require_company, require_coordinator, get_current_user
@@ -62,6 +63,19 @@ def get_job_applications(
 ):
     """Company — all applicants for one of their jobs."""
     return ApplicationService.get_by_job(db, job_id, current_user)
+
+
+@application_router.get("/{app_id}/logs", response_model=List[ApplicationLogResponse])
+def get_application_logs(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Status change history for one application.
+    Accessible by the student who applied, the company that owns the job, or coordinator.
+    """
+    return ApplicationService.get_logs(db, app_id, current_user)
 
 
 @application_router.put("/{app_id}/status", response_model=ApplicationResponse)
