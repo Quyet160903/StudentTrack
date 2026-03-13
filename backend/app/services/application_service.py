@@ -184,4 +184,36 @@ class ApplicationService:
             .order_by(ApplicationStatusLog.changed_at.asc())
             .all()
         )
-        return [ApplicationLogResponse.model_validate(log) for log in logs]
+
+        # Enrich each log with the changer's name and role
+        result = []
+        for log in logs:
+            changer = db.query(User).filter(User.id == log.changed_by).first()
+            # Get display name based on role
+            name = None
+            if changer:
+                from app.models.coordinator import Coordinator
+                from app.models.student import Student as StudentModel
+                from app.models.company import Company as CompanyModel
+                if changer.role.value == 'coordinator':
+                    profile = db.query(Coordinator).filter(Coordinator.user_id == changer.id).first()
+                    name = profile.full_name if profile else changer.email
+                elif changer.role.value == 'student':
+                    profile = db.query(StudentModel).filter(StudentModel.user_id == changer.id).first()
+                    name = profile.full_name if profile else changer.email
+                elif changer.role.value == 'company':
+                    profile = db.query(CompanyModel).filter(CompanyModel.user_id == changer.id).first()
+                    name = profile.name if profile else changer.email
+
+            result.append(ApplicationLogResponse(
+                id=log.id,
+                application_id=log.application_id,
+                old_status=log.old_status.value if log.old_status else None,
+                new_status=log.new_status.value if log.new_status else str(log.new_status),
+                changed_by=log.changed_by,
+                changed_by_name=name,
+                changed_by_role=changer.role.value if changer else None,
+                note=log.note,
+                changed_at=log.changed_at,
+            ))
+        return result
